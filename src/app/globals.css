@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.section-gradient-1 {
+  background: linear-gradient(135deg, #23272f 0%, #171717 100%);
+  box-shadow: 0 20px 40px -10px rgba(23, 23, 23, 0.2);
+  border-bottom-left-radius: 80px;
+  border-bottom-right-radius: 80px;
+  transition: background 0.8s;
+}
+
+.section-gradient-2 {
+  background: linear-gradient(135deg, #171717 0%, #23272f 100%);
+  box-shadow: 0 20px 40px -10px rgba(35, 39, 47, 0.2);
+  border-radius: 80px 80px 80px 80px / 60px 60px 60px 60px;
+  transition: background 0.8s;
+}
+
+.section-gradient-3 {
+  background: linear-gradient(135deg, #23272f 0%, #0a0a0a 100%);
+  box-shadow: 0 20px 40px -10px rgba(35, 39, 47, 0.2);
+  border-top-left-radius: 80px;
+  border-top-right-radius: 80px;
+  transition: background 0.8s;
+}
+
+.section-gradient-4 {
+  background: linear-gradient(135deg, #0a0a0a 0%, #23272f 100%);
+  box-shadow: 0 20px 40px -10px rgba(10, 10, 10, 0.2);
+  border-radius: 80px 80px 0 0 / 60px 60px 0 0;
+  transition: background 0.8s;
+}
+
+/* Add this to your styles/globals.css file */
+.fade-in {
+  animation: fadeInAnimation ease 1s;
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+}
+
+@keyframes fadeInAnimation {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* NEW "Jumble and Settle" Animation
+*/
+.name-animation {
+  /* Use flexbox to help with alignment */
+  display: flex;
+  flex-wrap: wrap; /* Allows name to wrap on smaller screens if needed */
+  justify-content: center;
+  perspective: 500px; /* Adds a bit of 3D depth, optional */
+}
+
+.name-animation span {
+  display: inline-block;
+  opacity: 0;
+  /* The animation will be applied here */
+  animation: jumble-and-settle 1.5s forwards;
+  /* Use a cubic-bezier for a more dynamic easing effect */
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* We use :nth-child to give each letter a different starting position */
+.name-animation span:nth-child(5n + 1) {
+  transform: translateY(-50px) rotate(-10deg) scale(0.8);
+}
+.name-animation span:nth-child(5n + 2) {
+  transform: translateY(40px) rotate(5deg) scale(1.2);
+}
+.name-animation span:nth-child(5n + 3) {
+  transform: translateY(-35px) rotate(8deg) scale(0.9);
+}
+.name-animation span:nth-child(5n + 4) {
+  transform: translateY(50px) rotate(-12deg) scale(1.1);
+}
+.name-animation span:nth-child(5n + 5) {
+  transform: translateY(-25px) rotate(3deg);
+}
+
+/* Keyframes for the letters moving from their random start to the final position */
+@keyframes jumble-and-settle {
+  from {
+    /* The 'from' state is implicitly set by the :nth-child transforms above */
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0) scale(1);
+  }
+}
