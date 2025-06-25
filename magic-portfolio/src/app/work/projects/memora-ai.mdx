@@ -1,0 +1,43 @@
+---
+title: "Memora AI: A Personal Memory Assistant for macOS"
+publishedAt: "2024-06-21"
+summary: "Memora AI is a macOS desktop assistant that transforms your screen into an extension of your memory. Instantly chat with an AI that remembers everything you've seen, learned, and asked."
+images:
+  - "/images/projects/memora-ai/cover.jpg"
+  - "/images/projects/memora-ai/chat-interface.jpg"
+team:
+  - name: "Tanish Pradhan Wong Ah Sui"
+    role: "Creator"
+    avatar: "/images/profile_pic.png"
+    linkedIn: "https://www.linkedin.com/in/tanish-pradhan-wong-ah-sui-a831631b4/"
+link: "https://github.com/tanwasp/memora-ai"
+---
+
+## Overview
+
+In this project, I developed Memora AI, a native macOS desktop assistant designed to augment human memory. The core idea was to create a seamless way for users to capture and interact with information from anywhere on their screen. By highlighting any text and using a simple shortcut, users can instantly start a conversation with an AI that has a persistent memory of every piece of information it has been shown. This turns the entire desktop environment into a searchable, intelligent knowledge base.
+
+## Key Features
+
+- **Universal Text Capture**: A global hotkey (`⌘+⇧+M`) allows users to capture highlighted text from any application on their Mac—be it a browser, a PDF, or a code editor—and immediately initiate a chat.
+- **Personal Memory Base**: Every interaction, including highlighted text and subsequent conversations, is embedded and stored. This creates a personal vector database that provides deep, contextually relevant answers over time.
+- **Context-Aware Chat**: The system intelligently retrieves past conversations and insights when you highlight similar text again, helping you connect ideas and build on previous knowledge without starting from scratch.
+- **Automated Note-Taking & Summarization**: An integrated AI agent automatically processes discussions and highlighted material, generating clean, bullet-pointed notes and summaries to reinforce learning and recall.
+- **Adaptive Learning System**: Memora AI learns what you know and identifies areas you might be struggling with. By tracking your interactions, it helps you bridge gaps in understanding and connect concepts across different sources and time.
+
+## Technologies Used
+
+- **Frontend (UI)**: Electron, React, and TypeScript for building the cross-platform desktop application frame and user interface.
+- **Backend**: Python and FastAPI to create a robust API server that handles all core intelligent operations.
+- **AI/LLM Orchestration**: LangChain and the OpenAI API for managing prompts, orchestrating chat logic, and handling complex tasks like summarization and analysis.
+- **Embeddings & Vector Search**: FAISS and OpenAI's `text-embedding-3-small` model for creating a high-performance semantic search and retrieval system.
+- **Data Storage**: SQLite for storing chat history, metadata, and relationships between conversations.
+- **Native Integration**: Swift/Objective-C for reliable, native text capture and Tesseract as an OCR fallback for non-selectable text areas.
+
+## Challenges and Learnings
+
+A primary challenge was implementing a robust, system-wide text capture mechanism that felt truly seamless. This required diving into native macOS APIs to ensure reliability across diverse applications. Another significant hurdle was architecting the memory system; designing the interaction between the FAISS vector index and the SQLite metadata store to enable efficient, context-aware retrieval was a complex but rewarding task. Finally, structuring the prompts and chains in LangChain to not only answer questions but also provide proactive summaries and connect ideas required significant iteration and fine-tuning.
+
+## Outcome
+
+The result is a powerful tool that acts as an extension of the user's own memory. Memora AI has the potential to significantly boost productivity and learning by making information recall effortless and intelligent. It bridges the gap between seeing information and truly internalizing it, allowing users to build a dynamic and interconnected personal knowledge base simply by going about their daily tasks. This project solidifies the value of creating AI tools that are deeply integrated into a user's existing workflow.
