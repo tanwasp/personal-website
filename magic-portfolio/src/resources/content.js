@@ -10,7 +10,7 @@ const person = {
   avatar: "/images/profile_pic.png",
   email: "tanishwas@gmail.com",
   location: "San Francisco, California", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
-  languages: ["English", "Nepali"], // optional: Leave the array empty if you don't want to display languages
+  languages: [], // optional: Leave the array empty if you don't want to display languages
 };
 
 const newsletter = {
@@ -91,8 +91,8 @@ const about = {
     description: (
       <>
         Hey! I'm a rising senior at Vassar College, double majoring in Computer
-        Science and Physics with a double minor in Physics and Applied
-        Mathematics. I'm
+        Science and Physics with a double minor in Economics and Applied
+        Mathematics.
       </>
     ),
   },

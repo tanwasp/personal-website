@@ -100,14 +100,14 @@ export const Header = () => {
               textVariant="body-default-s"
               suppressHydrationWarning
             >
-              {routes["/"] && (
+              {/* {routes["/"] && (
                 <ToggleButton
                   prefixIcon="home"
                   href="/"
                   selected={pathname === "/"}
                 />
-              )}
-              <Line background="neutral-alpha-medium" vert maxHeight="24" />
+              )} */}
+              {/* <Line background="neutral-alpha-medium" vert maxHeight="24" /> */}
               {routes["/about"] && (
                 <>
                   <ToggleButton
