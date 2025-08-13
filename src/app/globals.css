@@ -152,3 +152,135 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Animated vibrant background */
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --hue {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.dynamic-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  --angle: 0deg;
+  --hue: 0deg;
+  background: radial-gradient(
+      60% 60% at 20% 30%,
+      hsl(200 90% 60% / 0.2),
+      transparent 60%
+    ),
+    radial-gradient(60% 60% at 80% 70%, hsl(320 90% 60% / 0.2), transparent 60%),
+    conic-gradient(
+      from var(--angle),
+      hsl(200 100% 60% / 0.12),
+      hsl(260 100% 60% / 0.12),
+      hsl(320 100% 60% / 0.12),
+      hsl(200 100% 60% / 0.12)
+    );
+  filter: hue-rotate(var(--hue)) saturate(1.25) contrast(1.05);
+  animation: spin 28s linear infinite,
+    hueShift 16s ease-in-out infinite alternate;
+}
+
+.dynamic-bg__orbs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 52vmin;
+  height: 52vmin;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  filter: blur(60px);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+.orb--1 {
+  background: radial-gradient(
+    circle at 30% 30%,
+    hsl(190 95% 60% / 0.9),
+    transparent 60%
+  );
+  animation: orbitOne 36s linear infinite;
+}
+
+.orb--2 {
+  background: radial-gradient(
+    circle at 70% 40%,
+    hsl(280 95% 65% / 0.9),
+    transparent 60%
+  );
+  animation: orbitTwo 44s linear infinite;
+}
+
+.orb--3 {
+  background: radial-gradient(
+    circle at 40% 70%,
+    hsl(340 95% 62% / 0.9),
+    transparent 60%
+  );
+  animation: orbitThree 52s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    --angle: 360deg;
+  }
+}
+
+@keyframes hueShift {
+  0% {
+    --hue: 0deg;
+  }
+  100% {
+    --hue: 40deg;
+  }
+}
+
+@keyframes orbitOne {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) translateX(24vmin)
+      rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg) translateX(24vmin)
+      rotate(-360deg);
+  }
+}
+
+@keyframes orbitTwo {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) translateY(18vmin)
+      rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(-360deg) translateY(18vmin)
+      rotate(360deg);
+  }
+}
+
+@keyframes orbitThree {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) translate(14vmin, 14vmin)
+      rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg) translate(14vmin, 14vmin)
+      rotate(-360deg);
+  }
+}

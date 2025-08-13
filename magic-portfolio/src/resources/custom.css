@@ -1,8 +1,8 @@
 /* :root {
   /*
   /* Example setup for custom colors */
-  /* Generate at: https://once-ui.com/customize */
-  /*
+/* Generate at: https://once-ui.com/customize */
+/*
   --scheme-brand-100: #08002f;
   --scheme-brand-200:  #04025c;
   --scheme-brand-300:  #1f398e;
@@ -52,3 +52,168 @@
   --scheme-neutral-600-50: rgba(137,152,159,0.5);
   /*
 }*/
+
+/* Animated vibrant background */
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --hue {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.dynamic-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  --angle: 0deg;
+  --hue: 0deg;
+  /* motion state from client component */
+  --mx: 0; /* mouse x offset */
+  --my: 0; /* mouse y offset */
+  --scroll: 0; /* scroll parallax */
+  --cx: 0; /* cursor x */
+  --cy: 0; /* cursor y */
+  background: radial-gradient(
+      60% 60% at calc(20% + var(--mx) * 0.25) calc(30% + var(--my) * 0.25),
+      hsl(200 90% 60% / 0.2),
+      transparent 60%
+    ),
+    radial-gradient(
+      60% 60% at calc(80% + var(--mx) * -0.2) calc(70% + var(--my) * -0.2),
+      hsl(320 90% 60% / 0.2),
+      transparent 60%
+    ),
+    conic-gradient(
+      from var(--angle),
+      hsl(200 100% 60% / 0.12),
+      hsl(260 100% 60% / 0.12),
+      hsl(320 100% 60% / 0.12),
+      hsl(200 100% 60% / 0.12)
+    );
+  filter: hue-rotate(var(--hue)) saturate(1.25) contrast(1.05);
+  transform: translate3d(calc(var(--mx) * 0.2px), calc(var(--my) * 0.2px), 0)
+    translateY(calc(var(--scroll) * -1px));
+  animation: spin 12s linear infinite,
+    hueShift 9s ease-in-out infinite alternate;
+}
+
+.dynamic-bg__orbs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* cursor-following spot */
+.cursor-spot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+      20vmin 20vmin at calc(var(--cx) * 1px) calc(var(--cy) * 1px),
+      hsl(200 100% 70% / 0.25),
+      transparent 70%
+    ),
+    radial-gradient(
+      28vmin 28vmin at calc(var(--cx) * 1px) calc(var(--cy) * 1px),
+      hsl(320 100% 70% / 0.18),
+      transparent 72%
+    );
+  filter: blur(22px);
+  mix-blend-mode: screen;
+}
+
+.orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 52vmin;
+  height: 52vmin;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  filter: blur(60px);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+.orb--1 {
+  background: radial-gradient(
+    circle at 30% 30%,
+    hsl(190 95% 60% / 0.9),
+    transparent 60%
+  );
+  animation: orbitOne 20s linear infinite;
+}
+
+.orb--2 {
+  background: radial-gradient(
+    circle at 70% 40%,
+    hsl(280 95% 65% / 0.9),
+    transparent 60%
+  );
+  animation: orbitTwo 26s linear infinite;
+}
+
+.orb--3 {
+  background: radial-gradient(
+    circle at 40% 70%,
+    hsl(340 95% 62% / 0.9),
+    transparent 60%
+  );
+  animation: orbitThree 32s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    --angle: 360deg;
+  }
+}
+
+@keyframes hueShift {
+  0% {
+    --hue: 0deg;
+  }
+  100% {
+    --hue: 50deg;
+  }
+}
+
+@keyframes orbitOne {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) translateX(28vmin)
+      rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg) translateX(28vmin)
+      rotate(-360deg);
+  }
+}
+
+@keyframes orbitTwo {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) translateY(22vmin)
+      rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(-360deg) translateY(22vmin)
+      rotate(360deg);
+  }
+}
+
+@keyframes orbitThree {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) translate(18vmin, 18vmin)
+      rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg) translate(18vmin, 18vmin)
+      rotate(-360deg);
+  }
+}

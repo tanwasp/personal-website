@@ -27,6 +27,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <div className="dynamic-bg">
+          <div className="dynamic-bg__orbs">
+            <div className="orb orb--1" />
+            <div className="orb orb--2" />
+            <div className="orb orb--3" />
+          </div>
+        </div>
         {children}
       </body>
     </html>

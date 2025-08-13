@@ -2,7 +2,7 @@
 "use client"; // Add this directive for Next.js 13+ App Router
 
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 const letterPaths = {
   T: {
@@ -74,7 +74,7 @@ const SimultaneousNameAnimation = () => {
   // Animation variants for each part of a letter
   const partVariants = {
     // Initial 'scattered' state
-    scattered: (i) => ({
+    scattered: () => ({
       x: (Math.random() - 0.5) * 500, // Increase spread for a more dramatic effect
       y: (Math.random() - 0.5) * 500,
       rotate: (Math.random() - 0.5) * 720,
