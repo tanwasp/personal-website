@@ -1,0 +1,67 @@
+---
+title: "Cortex: AI-Powered Productivity Monitoring"
+publishedAt: "2025-08-16"
+summary: "Cortex is a macOS application that helps users stay accountable to their productivity goals using AI. It captures and analyzes on-screen activity in real-time, intelligently enforcing custom rules and triggering interventions when focus strays."
+# images:
+#   - "/images/projects/cortex/cover.jpg"
+#   - "/images/projects/cortex/demo.jpg"
+
+team:
+  - name: "Tanish Pradhan Wong Ah Sui"
+    role: "Creator"
+    avatar: "/images/profile_pic.png"
+    linkedIn: "https://www.linkedin.com/in/tanish-pradhan-wong-ah-sui/"
+link: "https://github.com/Bankminer78/cortex"
+---
+
+## Overview
+
+🧠 **Cortex** is a macOS application that helps users stay accountable to their productivity goals using AI. It captures and analyzes on-screen activity in real-time, intelligently enforcing custom rules and triggering interventions when focus strays. Whether you're slipping into a scroll-hole or veering off task, Cortex helps you realign with your goals—automatically.
+
+---
+
+## Key Features
+
+- **⏱️ Real-Time Monitoring**: Captures the foreground window every 2 seconds
+- **🧠 LLM-Powered Analysis**: Classifies activity with OpenAI/OpenRouter
+- **📃️ Persistent Storage**: Stores `{timestamp, bundleId, activity_label}` in SQLite
+- **⚠️ Smart Rules**: Example rule — "If Instagram scrolling ≥ 10s → show popup"
+- **🖥️ macOS Native**: Built with SwiftUI and ScreenCaptureKit for secure, efficient monitoring
+
+---
+
+## Example Use Case
+
+> *"I want to use Instagram to message people but always get sucked into the reels. Stop me from doomscrolling. Oh and I'm an impulsive shopper. Don't let me buy any more shoes"*
+
+Cortex detects this behavior through screenshots, identifies Instagram via bundle ID and image context, and triggers an alert when the rule is violated in real-time.
+
+---
+
+## Platform Availability
+
+Cortex is built with modularity and extensibility in mind:
+
+- **📱 Android App**: A native app built with Kotlin, designed for seamless on-the-go accountability and goal tracking.
+- **🥏 iOS App**: An intuitive and powerful mobile app for iPhone and iPad users.
+- **🌐 MCP Server**: A centralized server built on the Model Context Protocol (MCP) that powers cross-platform communication and context-aware intelligence.
+- **🧹 Modular SDK**: A pluggable architecture that lets developers integrate Cortex functionality into their own apps and systems.
+
+More integrations and platform support coming soon!
+
+---
+
+## Technologies Used
+
+- **SwiftUI**: For the native macOS interface
+- **ScreenCaptureKit**: For secure, efficient screen monitoring
+- **SQLite**: For persistent data storage
+- **OpenAI/OpenRouter**: For AI-powered activity classification
+- **Kotlin**: For Android app development
+- **Model Context Protocol (MCP)**: For cross-platform communication
+
+---
+
+## Outcome
+
+Cortex empowers users to maintain focus and achieve their productivity goals through intelligent, automated interventions. By combining real-time monitoring with AI-driven insights, it creates a personalized productivity companion that adapts to individual work patterns and helps build better digital habits.
