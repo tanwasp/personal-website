@@ -13,6 +13,7 @@ import {
   blog,
   work,
   gallery,
+  chat,
 } from "@/resources";
 import { ThemeToggle } from "./ThemeToggle";
 import styles from "./Header.module.scss";
@@ -139,6 +140,23 @@ export const Header = () => {
                     prefixIcon="grid"
                     href="/work"
                     selected={pathname.startsWith("/work")}
+                  />
+                </>
+              )}
+              {routes["/chat"] && (
+                <>
+                  <ToggleButton
+                    className="s-flex-hide"
+                    prefixIcon="symbol"
+                    href="/chat"
+                    label={chat.label}
+                    selected={pathname.startsWith("/chat")}
+                  />
+                  <ToggleButton
+                    className="s-flex-show"
+                    prefixIcon="symbol"
+                    href="/chat"
+                    selected={pathname.startsWith("/chat")}
                   />
                 </>
               )}

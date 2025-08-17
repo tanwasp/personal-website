@@ -346,4 +346,11 @@ const gallery = {
   ],
 };
 
-export { person, social, newsletter, home, about, blog, work, gallery };
+const chat = {
+  path: "/chat",
+  label: "Chat",
+  title: `Chat with ${person.name}`,
+  description: `Have a conversation with ${person.name}'s AI assistant`,
+};
+
+export { person, social, newsletter, home, about, blog, work, gallery, chat };
