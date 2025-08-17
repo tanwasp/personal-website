@@ -153,7 +153,7 @@ export default function Chat() {
             horizontal="center"
           >
             <Heading variant="display-strong-l" style={{ textAlign: "center" }}>
-              Chat with Tanish
+              Chat with Tanish's AI
             </Heading>
             <Text
               variant="body-default-m"
