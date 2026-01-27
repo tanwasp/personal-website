@@ -79,7 +79,8 @@
   --scroll: 0; /* scroll parallax */
   --cx: 0; /* cursor x */
   --cy: 0; /* cursor y */
-  background: radial-gradient(
+  background:
+    radial-gradient(
       60% 60% at calc(20% + var(--mx) * 0.25) calc(30% + var(--my) * 0.25),
       hsl(200 90% 60% / 0.2),
       transparent 60%
@@ -97,26 +98,31 @@
       hsl(200 100% 60% / 0.12)
     );
   filter: hue-rotate(var(--hue)) saturate(1.25) contrast(1.05);
-  transform: translate3d(calc(var(--mx) * 0.2px), calc(var(--my) * 0.2px), 0)
-    translateY(calc(var(--scroll) * -1px));
-  animation: spin 12s linear infinite,
+  transform: translate3d(
+      calc(var(--mx) * 0.2 * 1px),
+      calc(var(--my) * 0.2 * 1px),
+      0
+    )
+    translateY(calc(var(--scroll) * -1 * 1px));
+  animation:
+    spin 12s linear infinite,
     hueShift 9s ease-in-out infinite alternate;
 }
 
 .dynamic-bg__orbs {
   position: absolute;
-  inset: 0;
-  overflow: hidden;
+  inset: -50%;
+  overflow: visible;
 }
 
 /* cursor-following spot */
 .cursor-spot {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
       20vmin 20vmin at calc(var(--cx) * 1px) calc(var(--cy) * 1px),
       hsl(200 100% 70% / 0.25),
       transparent 70%

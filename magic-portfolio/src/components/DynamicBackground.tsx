@@ -3,11 +3,13 @@
 import React, { useEffect, useRef } from "react";
 
 export default function DynamicBackground(): JSX.Element {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const bgRef = useRef<HTMLDivElement | null>(null);
+  const cursorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const bgEl = bgRef.current;
+    const cursorEl = cursorRef.current;
+    if (!bgEl || !cursorEl) return;
 
     let rafId: number | null = null;
 
@@ -37,11 +39,11 @@ export default function DynamicBackground(): JSX.Element {
       cx += (targetCx - cx) * kSpot;
       cy += (targetCy - cy) * kSpot;
 
-      el.style.setProperty("--mx", mx.toFixed(2));
-      el.style.setProperty("--my", my.toFixed(2));
-      el.style.setProperty("--scroll", scroll.toFixed(2));
-      el.style.setProperty("--cx", cx.toFixed(2));
-      el.style.setProperty("--cy", cy.toFixed(2));
+      bgEl.style.setProperty("--mx", mx.toFixed(2));
+      bgEl.style.setProperty("--my", my.toFixed(2));
+      bgEl.style.setProperty("--scroll", scroll.toFixed(2));
+      cursorEl.style.setProperty("--cx", cx.toFixed(2));
+      cursorEl.style.setProperty("--cy", cy.toFixed(2));
 
       rafId = requestAnimationFrame(tick);
     };
@@ -76,13 +78,15 @@ export default function DynamicBackground(): JSX.Element {
   }, []);
 
   return (
-    <div ref={containerRef} className="dynamic-bg" aria-hidden>
-      <div className="dynamic-bg__orbs">
-        <div className="orb orb--1" />
-        <div className="orb orb--2" />
-        <div className="orb orb--3" />
+    <>
+      <div ref={bgRef} className="dynamic-bg" aria-hidden>
+        <div className="dynamic-bg__orbs">
+          <div className="orb orb--1" />
+          <div className="orb orb--2" />
+          <div className="orb orb--3" />
+        </div>
       </div>
-      <div className="cursor-spot" />
-    </div>
+      <div ref={cursorRef} className="cursor-spot" aria-hidden />
+    </>
   );
 }

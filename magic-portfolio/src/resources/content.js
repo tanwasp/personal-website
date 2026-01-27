@@ -10,7 +10,7 @@ const person = {
   role: "Software Engineer",
   avatar: "/images/profile_pic.png",
   email: "tanishwas@gmail.com",
-  location: "San Francisco, California", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
+  location: "Poughkeepsie, New York", // Expecting the IANA time zone identifier, e.g., 'Europe/Vienna'
   languages: [], // optional: Leave the array empty if you don't want to display languages
 };
 
@@ -92,7 +92,7 @@ const about = {
     description: (
       <>
         Hey! I'm a rising senior at Vassar College, double majoring in Computer
-        Science and Physics with a double minor in Economics and Applied
+        Science and Economics with a double minor in Physics and Applied
         Mathematics.
       </>
     ),
@@ -213,7 +213,7 @@ const about = {
         name: "Vassar College",
         description: (
           <>
-            Bachelor of Arts - Double Major in Computer Science and Physics
+            Bachelor of Arts - Double Major in Computer Science and Economics
             <br />
             GPA: 3.97/4.00
           </>
