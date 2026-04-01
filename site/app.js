@@ -1,97 +1,182 @@
 /* ============================================================
-   TANISH'S UNIVERSE — 3D Scene + Interactions
+   TANISH'S UNIVERSE — 3D Solar System Flythrough
+   
+   The camera follows a path through a solar system.
+   Scroll drives progress along the path.
+   Each planet has a position; when the camera is near, an
+   HTML overlay fades in.
    ============================================================ */
 
 import * as THREE from 'three';
 
 // ============================================================
-// 1. THREE.JS SCENE SETUP
+// CONFIG
+// ============================================================
+
+const TOTAL_SCROLL = 12000;   // matches #scroll-driver height
+const PATH_LENGTH  = 1400;    // z-depth of the entire flight path — spread out!
+const SHOW_RADIUS  = 40;      // distance at which overlay starts showing
+const PEAK_RADIUS  = 20;      // distance at which overlay is fully visible
+
+// Planet definitions: name, position in 3D space, visual properties
+const PLANETS = [
+  {
+    name: 'intro',
+    pos: new THREE.Vector3(0, 0, 0),
+    radius: 0,
+    color: null,
+    t: 0.0,
+  },
+  {
+    name: 'mauritius',
+    pos: new THREE.Vector3(25, -5, -140),
+    radius: 5,
+    color: 0x00d4ff,
+    ringColor: 0x33dfff,
+    t: 0.1,
+  },
+  {
+    name: 'sikkim',
+    pos: new THREE.Vector3(-22, 8, -280),
+    radius: 4,
+    color: 0x22c55e,
+    t: 0.19,
+  },
+  {
+    name: 'china',
+    pos: new THREE.Vector3(28, -4, -420),
+    radius: 6,
+    color: 0xef4444,
+    ringColor: 0xfbbf24,
+    t: 0.28,
+  },
+  {
+    name: 'uwc',
+    pos: new THREE.Vector3(-25, 6, -560),
+    radius: 4.5,
+    color: 0xfbbf24,
+    t: 0.37,
+  },
+  {
+    name: 'vassar',
+    pos: new THREE.Vector3(22, -6, -700),
+    radius: 5.5,
+    color: 0xa855f7,
+    ringColor: 0xd8b4fe,
+    t: 0.48,
+  },
+  {
+    name: 'work',
+    pos: new THREE.Vector3(-28, 4, -860),
+    radius: 7,
+    color: 0x00d4ff,
+    ringColor: 0x00d4ff,
+    t: 0.6,
+  },
+  {
+    name: 'projects',
+    pos: new THREE.Vector3(24, -5, -1000),
+    radius: 5.5,
+    color: 0xf472b6,
+    ringColor: 0xa855f7,
+    t: 0.72,
+  },
+  {
+    name: 'about',
+    pos: new THREE.Vector3(-20, 7, -1140),
+    radius: 4.8,
+    color: 0xfbbf24,
+    t: 0.83,
+  },
+  {
+    name: 'contact',
+    pos: new THREE.Vector3(0, 0, -1320),
+    radius: 8,
+    color: 0x00d4ff,
+    ringColor: 0xa855f7,
+    t: 0.95,
+  },
+];
+
+// ============================================================
+// RENDERER SETUP
 // ============================================================
 
 const canvas = document.getElementById('cosmos');
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
-camera.position.set(0, 0, 5);
-
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  antialias: true,
-  alpha: true,
-  powerPreference: 'high-performance'
-});
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setClearColor(0x050510, 1);
+renderer.setClearColor(0x030308, 1);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x030308, 0.004);
+
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.set(0, 0, 30);
 
 // ============================================================
-// 2. STARFIELD
+// LIGHTING
+// ============================================================
+
+const ambient = new THREE.AmbientLight(0x111122, 0.8);
+scene.add(ambient);
+
+const sunLight = new THREE.PointLight(0xffffff, 2.5, 1500);
+sunLight.position.set(50, 30, 20);
+scene.add(sunLight);
+
+const fillLight = new THREE.PointLight(0x00d4ff, 0.6, 1000);
+fillLight.position.set(-40, -20, -400);
+scene.add(fillLight);
+
+// ============================================================
+// STARFIELD
 // ============================================================
 
 function createStarfield() {
-  const count = 3000;
+  const count = 5000;
   const geo = new THREE.BufferGeometry();
   const positions = new Float32Array(count * 3);
   const sizes = new Float32Array(count);
-  const colors = new Float32Array(count * 3);
-
-  const colorPalette = [
-    new THREE.Color(0x00d4ff),  // cyan
-    new THREE.Color(0xa855f7),  // violet
-    new THREE.Color(0xf472b6),  // rose
-    new THREE.Color(0xffffff),  // white
-    new THREE.Color(0xffd700),  // gold
-  ];
 
   for (let i = 0; i < count; i++) {
     const i3 = i * 3;
-    const radius = 200 + Math.random() * 800;
+    const r = 300 + Math.random() * 900;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
-    
-    positions[i3]     = radius * Math.sin(phi) * Math.cos(theta);
-    positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-    positions[i3 + 2] = radius * Math.cos(phi);
-    
-    sizes[i] = Math.random() * 2 + 0.5;
-    
-    const col = colorPalette[Math.floor(Math.random() * colorPalette.length)];
-    colors[i3]     = col.r;
-    colors[i3 + 1] = col.g;
-    colors[i3 + 2] = col.b;
+    positions[i3]     = r * Math.sin(phi) * Math.cos(theta);
+    positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i3 + 2] = r * Math.cos(phi) - PATH_LENGTH * 0.5;
+    sizes[i] = Math.random() * 1.8 + 0.3;
   }
 
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
   const mat = new THREE.ShaderMaterial({
     vertexShader: `
       attribute float size;
-      attribute vec3 color;
-      varying vec3 vColor;
-      varying float vOpacity;
+      varying float vAlpha;
       void main() {
-        vColor = color;
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        float dist = length(mvPosition.xyz);
-        vOpacity = clamp(1.0 - dist / 800.0, 0.1, 1.0);
-        gl_PointSize = size * (300.0 / -mvPosition.z);
-        gl_Position = projectionMatrix * mvPosition;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        float d = length(mv.xyz);
+        vAlpha = clamp(1.0 - d / 700.0, 0.05, 1.0);
+        gl_PointSize = size * (250.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
       }
     `,
     fragmentShader: `
-      varying vec3 vColor;
-      varying float vOpacity;
+      varying float vAlpha;
       void main() {
-        float d = length(gl_PointCoord - vec2(0.5));
+        float d = length(gl_PointCoord - 0.5);
         if (d > 0.5) discard;
-        float alpha = smoothstep(0.5, 0.0, d) * vOpacity;
-        gl_FragColor = vec4(vColor, alpha);
+        float glow = smoothstep(0.5, 0.0, d);
+        gl_FragColor = vec4(vec3(0.85, 0.88, 1.0), glow * vAlpha);
       }
     `,
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending
+    blending: THREE.AdditiveBlending,
   });
 
   return new THREE.Points(geo, mat);
@@ -101,384 +186,474 @@ const stars = createStarfield();
 scene.add(stars);
 
 // ============================================================
-// 3. NEBULA CLOUDS
+// DISTANT GALAXY / NEBULA SPRITES
 // ============================================================
 
-function createNebula() {
-  const group = new THREE.Group();
-  const nebulaColors = [
-    { color: 0x00d4ff, opacity: 0.03 },
-    { color: 0xa855f7, opacity: 0.025 },
-    { color: 0xf472b6, opacity: 0.02 },
-  ];
-
-  nebulaColors.forEach((config, i) => {
-    const geo = new THREE.PlaneGeometry(300, 300);
-    const mat = new THREE.MeshBasicMaterial({
-      color: config.color,
-      transparent: true,
-      opacity: config.opacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(
-      (Math.random() - 0.5) * 200,
-      (Math.random() - 0.5) * 150,
-      -300 - i * 100
-    );
-    mesh.rotation.z = Math.random() * Math.PI;
-    group.add(mesh);
-  });
-
-  return group;
-}
-
-const nebula = createNebula();
-scene.add(nebula);
-
-// ============================================================
-// 4. FLOATING GEOMETRIC OBJECTS (Planets/Islands)
-// ============================================================
-
-const floatingObjects = [];
-
-function createFloatingObject(geometry, color, position, scale = 1) {
-  const mat = new THREE.MeshBasicMaterial({
-    color,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.3,
-  });
-  const mesh = new THREE.Mesh(geometry, mat);
-  mesh.position.copy(position);
-  mesh.scale.setScalar(scale);
-  mesh.userData.initialY = position.y;
-  mesh.userData.floatSpeed = 0.3 + Math.random() * 0.5;
-  mesh.userData.floatAmp = 0.2 + Math.random() * 0.3;
-  mesh.userData.rotSpeed = 0.1 + Math.random() * 0.3;
-  scene.add(mesh);
-  floatingObjects.push(mesh);
-  return mesh;
-}
-
-// Create objects scattered through the scene
-// Objects placed far at the edges — large x/y offsets
-// They serve as peripheral eye-candy, never near center
-const objects = [
-  { geo: new THREE.IcosahedronGeometry(2.5, 1), color: 0x00d4ff, pos: new THREE.Vector3(-35, 18, -50) },
-  { geo: new THREE.OctahedronGeometry(2, 0), color: 0xa855f7, pos: new THREE.Vector3(38, -15, -70) },
-  { geo: new THREE.TorusGeometry(1.5, 0.4, 12, 32), color: 0xf472b6, pos: new THREE.Vector3(-30, -20, -90) },
-  { geo: new THREE.TetrahedronGeometry(2.2, 0), color: 0x00d4ff, pos: new THREE.Vector3(35, 22, -110) },
-  { geo: new THREE.DodecahedronGeometry(1.8, 0), color: 0xa855f7, pos: new THREE.Vector3(-40, 12, -130) },
-  { geo: new THREE.IcosahedronGeometry(3, 0), color: 0xffd700, pos: new THREE.Vector3(30, -18, -150) },
-  { geo: new THREE.TorusKnotGeometry(1.2, 0.4, 64, 16), color: 0x00d4ff, pos: new THREE.Vector3(-25, 25, -170) },
-  { geo: new THREE.OctahedronGeometry(2.2, 0), color: 0xf472b6, pos: new THREE.Vector3(32, -10, -190) },
-  { geo: new THREE.IcosahedronGeometry(1.5, 1), color: 0xa855f7, pos: new THREE.Vector3(-38, -15, -210) },
-  { geo: new THREE.DodecahedronGeometry(2.5, 0), color: 0x00d4ff, pos: new THREE.Vector3(28, 20, -230) },
-];
-
-objects.forEach(o => createFloatingObject(o.geo, o.color, o.pos));
-
-// ============================================================
-// 5. CONNECTING PATH (particle trail)
-// ============================================================
-
-function createPath() {
-  const count = 500;
+// Subtle dust particles along the path for depth
+function addDustParticles() {
+  const count = 1500;
   const geo = new THREE.BufferGeometry();
   const positions = new Float32Array(count * 3);
-
   for (let i = 0; i < count; i++) {
-    const t = i / count;
     const i3 = i * 3;
-    positions[i3]     = Math.sin(t * Math.PI * 4) * 8 + (Math.random() - 0.5) * 4;
-    positions[i3 + 1] = Math.cos(t * Math.PI * 3) * 6 + (Math.random() - 0.5) * 3;
-    positions[i3 + 2] = -t * 140;
+    positions[i3]     = (Math.random() - 0.5) * 80;
+    positions[i3 + 1] = (Math.random() - 0.5) * 40;
+    positions[i3 + 2] = -Math.random() * PATH_LENGTH * 1.1;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({
+    color: 0x4466aa,
+    size: 0.15,
+    transparent: true,
+    opacity: 0.3,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  scene.add(new THREE.Points(geo, mat));
+}
+
+addDustParticles();
+
+// ============================================================
+// PLANETS — 3D objects
+// ============================================================
+
+const planetMeshes = [];
+
+PLANETS.forEach(p => {
+  if (!p.color || p.radius === 0) return;
+
+  const group = new THREE.Group();
+  group.position.copy(p.pos);
+
+  // Main sphere — custom shader for glow effect
+  const geo = new THREE.SphereGeometry(p.radius, 48, 48);
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uTime;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        float fresnel = pow(1.0 - dot(vNormal, vViewDir), 3.0);
+        float rim = fresnel * 0.7;
+        float core = max(dot(vNormal, vec3(0.5, 0.5, 0.3)), 0.0) * 0.4;
+        float pulse = 0.9 + 0.1 * sin(uTime * 0.8);
+        vec3 col = uColor * (core + rim + 0.15) * pulse;
+        gl_FragColor = vec4(col, 0.85);
+      }
+    `,
+    uniforms: {
+      uColor: { value: new THREE.Color(p.color) },
+      uTime: { value: 0 },
+    },
+    transparent: true,
+    side: THREE.FrontSide,
+  });
+
+  const sphere = new THREE.Mesh(geo, mat);
+  group.add(sphere);
+
+  // Atmosphere glow
+  const glowGeo = new THREE.SphereGeometry(p.radius * 1.25, 32, 32);
+  const glowMat = new THREE.ShaderMaterial({
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        float intensity = pow(0.65 - dot(vNormal, vViewDir), 2.5);
+        gl_FragColor = vec4(uColor, intensity * 0.5);
+      }
+    `,
+    uniforms: {
+      uColor: { value: new THREE.Color(p.color) },
+    },
+    transparent: true,
+    side: THREE.BackSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+  group.add(glowMesh);
+
+  // Rings (if defined)
+  if (p.ringColor) {
+    const ringGeo = new THREE.TorusGeometry(p.radius * 1.8, 0.15, 2, 80);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: p.ringColor,
+      transparent: true,
+      opacity: 0.25,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI * 0.45;
+    ring.rotation.y = Math.random() * 0.5;
+    group.add(ring);
+  }
+
+  // Small orbiting moons
+  const moonCount = Math.floor(Math.random() * 3) + 1;
+  for (let i = 0; i < moonCount; i++) {
+    const moonGeo = new THREE.SphereGeometry(0.2 + Math.random() * 0.3, 12, 12);
+    const moonMat = new THREE.MeshBasicMaterial({
+      color: 0xcccccc,
+      transparent: true,
+      opacity: 0.6,
+    });
+    const moon = new THREE.Mesh(moonGeo, moonMat);
+    moon.userData.orbitRadius = p.radius * 2 + i * 1.5;
+    moon.userData.orbitSpeed = 0.3 + Math.random() * 0.5;
+    moon.userData.orbitOffset = Math.random() * Math.PI * 2;
+    moon.userData.orbitTilt = (Math.random() - 0.5) * 0.6;
+    group.add(moon);
+  }
+
+  scene.add(group);
+  group.visible = false; // hidden until camera is near
+  planetMeshes.push({ group, planet: p, sphere, mat });
+});
+
+// ============================================================
+// ASTEROID BELT (between journey and work sections)
+// ============================================================
+
+function createAsteroidBelt() {
+  const count = 300;
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+
+  const beltZ = -780; // between vassar and work
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = 15 + Math.random() * 25;
+    const i3 = i * 3;
+    positions[i3]     = Math.cos(angle) * r;
+    positions[i3 + 1] = (Math.random() - 0.5) * 5;
+    positions[i3 + 2] = beltZ + (Math.random() - 0.5) * 30;
+    sizes[i] = 0.3 + Math.random() * 0.8;
   }
 
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
   const mat = new THREE.PointsMaterial({
-    color: 0x00d4ff,
-    size: 0.08,
+    color: 0x888888,
+    size: 0.6,
     transparent: true,
-    opacity: 0.4,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
+    opacity: 0.5,
+    depthWrite: false,
   });
 
-  return new THREE.Points(geo, mat);
+  const belt = new THREE.Points(geo, mat);
+  scene.add(belt);
+  return belt;
 }
 
-const path = createPath();
-scene.add(path);
+const asteroidBelt = createAsteroidBelt();
 
 // ============================================================
-// 6. SCROLL-DRIVEN CAMERA MOVEMENT
+// CAMERA PATH — smooth curve through the solar system
+// ============================================================
+
+// Build a CatmullRom spline through key waypoints
+// The camera will follow this path based on scroll progress
+const pathPoints = [];
+
+// Start: slightly in front of origin
+pathPoints.push(new THREE.Vector3(0, 0, 30));
+
+// For each planet, create an approach point (fly near it, not into it)
+PLANETS.forEach(p => {
+  if (p.name === 'intro') return;
+  // Camera approaches from slightly to the left of the planet
+  const offset = new THREE.Vector3(
+    p.pos.x < 0 ? p.pos.x + p.radius + 12 : p.pos.x - p.radius - 12,
+    p.pos.y + 2,
+    p.pos.z + 5
+  );
+  pathPoints.push(offset);
+});
+
+// End: past the last planet
+pathPoints.push(new THREE.Vector3(0, 0, -PATH_LENGTH - 20));
+
+const cameraPath = new THREE.CatmullRomCurve3(pathPoints, false, 'catmullrom', 0.3);
+
+// ============================================================
+// SCROLL → CAMERA POSITION
 // ============================================================
 
 let scrollProgress = 0;
-const maxZ = -130;
+let targetScrollProgress = 0;
 
-function updateCameraFromScroll() {
-  const scrollContainer = document.getElementById('scroll-container');
-  const scrollHeight = scrollContainer.scrollHeight - window.innerHeight;
-  const scrollTop = window.scrollY || window.pageYOffset;
-  scrollProgress = Math.min(scrollTop / scrollHeight, 1);
-
-  // Camera moves forward through the scene
-  camera.position.z = 5 + scrollProgress * maxZ;
-  camera.position.x = Math.sin(scrollProgress * Math.PI * 2) * 1.5;
-  camera.position.y = Math.cos(scrollProgress * Math.PI * 1.5) * 0.8;
-  
-  // Slight rotation based on scroll
-  camera.rotation.z = Math.sin(scrollProgress * Math.PI) * 0.02;
+function updateScroll() {
+  const maxScroll = TOTAL_SCROLL - window.innerHeight;
+  const rawProgress = window.scrollY / maxScroll;
+  targetScrollProgress = Math.max(0, Math.min(1, rawProgress));
 }
 
-window.addEventListener('scroll', updateCameraFromScroll, { passive: true });
+window.addEventListener('scroll', updateScroll, { passive: true });
 
 // ============================================================
-// 7. SECTION REVEAL ON SCROLL
+// OVERLAY VISIBILITY
 // ============================================================
 
-function initScrollReveals() {
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-        }
-      });
-    },
-    { threshold: 0.15, rootMargin: '0px 0px -50px 0px' }
-  );
+const overlays = {};
+document.querySelectorAll('.overlay').forEach(el => {
+  overlays[el.dataset.planet] = el;
+});
 
-  // Section content reveals
-  document.querySelectorAll('.section__content').forEach(el => observer.observe(el));
+// Set overlay card position: if planet is on the right (x > 0), 
+// put the card on the left, and vice versa
+PLANETS.forEach(p => {
+  const el = overlays[p.name];
+  if (!el || p.name === 'intro') return;
+  // Planet on the right → card on the left (default), planet on left → card on right
+  if (Math.abs(p.pos.x) < 5) {
+    el.dataset.side = 'center';
+  } else {
+    el.dataset.side = p.pos.x > 0 ? 'left' : 'right';
+  }
+});
 
-  // Journey stops
-  const stopObserver = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry, i) => {
-        if (entry.isIntersecting) {
-          setTimeout(() => {
-            entry.target.classList.add('visible');
-          }, i * 100);
-        }
-      });
-    },
-    { threshold: 0.3 }
-  );
+function updateOverlays(camPos) {
+  let closestPlanet = null;
+  let closestDist = Infinity;
 
-  document.querySelectorAll('.journey-stop').forEach(el => stopObserver.observe(el));
-}
-
-// ============================================================
-// 8. FLOATING NAV
-// ============================================================
-
-function initFloatingNav() {
-  const dots = document.querySelectorAll('.nav-dot');
-  const sections = document.querySelectorAll('.section');
-
-  dots.forEach(dot => {
-    dot.addEventListener('click', () => {
-      const target = dot.dataset.target;
-      const section = document.querySelector(`[data-section="${target}"]`);
-      if (section) {
-        section.scrollIntoView({ behavior: 'smooth' });
-      }
-    });
+  PLANETS.forEach(p => {
+    const dist = camPos.distanceTo(p.pos);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestPlanet = p;
+    }
   });
 
-  // Update active dot on scroll
-  const navObserver = new IntersectionObserver(
-    (entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const sectionName = entry.target.dataset.section;
-          dots.forEach(d => d.classList.remove('active'));
-          const activeDot = document.querySelector(`.nav-dot[data-target="${sectionName}"]`);
-          if (activeDot) activeDot.classList.add('active');
-        }
-      });
-    },
-    { threshold: 0.3 }
-  );
+  PLANETS.forEach(p => {
+    const el = overlays[p.name];
+    if (!el) return;
 
-  sections.forEach(section => navObserver.observe(section));
+    const dist = camPos.distanceTo(p.pos);
+    const showDist = p.name === 'intro' ? 35 : SHOW_RADIUS;
+    const peakDist = p.name === 'intro' ? 15 : PEAK_RADIUS;
+
+    if (dist < showDist && closestPlanet === p) {
+      const alpha = 1 - Math.max(0, Math.min(1, (dist - peakDist) / (showDist - peakDist)));
+      el.style.opacity = alpha;
+      el.classList.toggle('visible', alpha > 0.1);
+    } else {
+      el.style.opacity = 0;
+      el.classList.remove('visible');
+    }
+  });
 }
 
 // ============================================================
-// 9. MOUSE PARALLAX
+// NAV DOTS
+// ============================================================
+
+const navPips = document.querySelectorAll('.nav-pip');
+
+navPips.forEach(pip => {
+  pip.addEventListener('click', () => {
+    const targetName = pip.dataset.planet;
+    const planet = PLANETS.find(p => p.name === targetName);
+    if (!planet) return;
+
+    // Scroll to the right position
+    const maxScroll = TOTAL_SCROLL - window.innerHeight;
+    const targetScroll = planet.t * maxScroll;
+    window.scrollTo({ top: targetScroll, behavior: 'smooth' });
+  });
+});
+
+function updateNav() {
+  // Find which planet we're closest to
+  let activeName = 'intro';
+  let minDist = Infinity;
+
+  PLANETS.forEach(p => {
+    const dist = Math.abs(scrollProgress - p.t);
+    if (dist < minDist) {
+      minDist = dist;
+      activeName = p.name;
+    }
+  });
+
+  navPips.forEach(pip => {
+    pip.classList.toggle('active', pip.dataset.planet === activeName);
+  });
+}
+
+// Progress bar
+const progressBar = document.getElementById('progress-bar');
+
+// ============================================================
+// MOUSE PARALLAX
 // ============================================================
 
 let mouseX = 0, mouseY = 0;
-
-document.addEventListener('mousemove', (e) => {
+document.addEventListener('mousemove', e => {
   mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
   mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
 });
 
 // ============================================================
-// 10. EASTER EGGS
+// EASTER EGGS
 // ============================================================
 
 function initEasterEggs() {
-  // Konami Code
   const konamiCode = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];
   let konamiIndex = 0;
 
-  // Create overlay
   const overlay = document.createElement('div');
-  overlay.id = 'easter-egg-overlay';
+  overlay.id = 'easter-egg';
   overlay.innerHTML = `
-    <div class="easter-egg-content">
+    <div>
       <h2>🎮 Achievement Unlocked</h2>
       <p>You found the Konami Code easter egg.</p>
-      <p style="margin-top: 1rem; color: var(--color-accent);">
+      <p style="color: #00d4ff; margin-top: 1rem;">
         "The answer to the ultimate question of life,<br/>
         the universe, and everything is 42."
       </p>
-      <p style="margin-top: 2rem; font-size: 0.75rem; color: var(--color-text-faint);">
-        Press Escape or click anywhere to close
-      </p>
+      <p class="close-hint">Press Escape or click anywhere to close</p>
     </div>
   `;
   document.body.appendChild(overlay);
 
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', e => {
     if (e.keyCode === konamiCode[konamiIndex]) {
       konamiIndex++;
       if (konamiIndex === konamiCode.length) {
         overlay.classList.add('show');
         konamiIndex = 0;
-
-        // Trigger celebration particles
-        celebrateParticles();
       }
     } else {
       konamiIndex = 0;
     }
-
-    // Escape to close
-    if (e.key === 'Escape') {
-      overlay.classList.remove('show');
-    }
+    if (e.key === 'Escape') overlay.classList.remove('show');
   });
 
-  overlay.addEventListener('click', () => {
-    overlay.classList.remove('show');
-  });
+  overlay.addEventListener('click', () => overlay.classList.remove('show'));
 
-  // Secret console message
   console.log(
     '%c🚀 Hey, you found the console! ',
-    'font-size: 16px; font-weight: bold; color: #00d4ff; background: #050510; padding: 10px; border-radius: 4px;'
+    'font-size: 16px; font-weight: bold; color: #00d4ff; background: #030308; padding: 10px; border-radius: 4px;'
   );
   console.log(
     '%cIf you\'re reading this, you\'re probably a developer. We should talk.\ntanishwas@gmail.com',
-    'font-size: 12px; color: #a855f7; background: #050510; padding: 6px; border-radius: 4px;'
+    'font-size: 12px; color: #a855f7; background: #030308; padding: 6px;'
   );
 }
 
-function celebrateParticles() {
-  // Add a burst of particles to the scene
-  const count = 200;
-  const geo = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  const velocities = [];
-
-  for (let i = 0; i < count; i++) {
-    const i3 = i * 3;
-    positions[i3] = camera.position.x;
-    positions[i3 + 1] = camera.position.y;
-    positions[i3 + 2] = camera.position.z - 5;
-    velocities.push(
-      (Math.random() - 0.5) * 0.3,
-      (Math.random() - 0.5) * 0.3,
-      (Math.random() - 0.5) * 0.3
-    );
-  }
-
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-  const mat = new THREE.PointsMaterial({
-    color: 0xffd700,
-    size: 0.15,
-    transparent: true,
-    opacity: 1,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-  });
-
-  const particles = new THREE.Points(geo, mat);
-  scene.add(particles);
-
-  let frame = 0;
-  function animateBurst() {
-    frame++;
-    const pos = particles.geometry.attributes.position.array;
-    for (let i = 0; i < count; i++) {
-      const i3 = i * 3;
-      pos[i3]     += velocities[i3];
-      pos[i3 + 1] += velocities[i3 + 1];
-      pos[i3 + 2] += velocities[i3 + 2];
-    }
-    particles.geometry.attributes.position.needsUpdate = true;
-    mat.opacity = Math.max(0, 1 - frame / 100);
-
-    if (frame < 100) {
-      requestAnimationFrame(animateBurst);
-    } else {
-      scene.remove(particles);
-      geo.dispose();
-      mat.dispose();
-    }
-  }
-  animateBurst();
-}
+initEasterEggs();
 
 // ============================================================
-// 11. ANIMATION LOOP
+// ANIMATION LOOP
 // ============================================================
 
 const clock = new THREE.Clock();
+const lookAtTarget = new THREE.Vector3();
 
 function animate() {
   requestAnimationFrame(animate);
 
   const elapsed = clock.getElapsedTime();
+  const dt = clock.getDelta();
 
-  // Rotate starfield slowly
-  stars.rotation.y = elapsed * 0.01;
-  stars.rotation.x = elapsed * 0.005;
+  // Smooth scroll interpolation
+  scrollProgress += (targetScrollProgress - scrollProgress) * 0.06;
 
-  // Mouse parallax on stars
-  stars.rotation.y += mouseX * 0.0003;
-  stars.rotation.x += mouseY * 0.0003;
+  // Get camera position from path
+  const t = Math.max(0.0001, Math.min(0.9999, scrollProgress));
+  const point = cameraPath.getPointAt(t);
+  const lookAhead = cameraPath.getPointAt(Math.min(t + 0.02, 0.9999));
 
-  // Nebula drift
-  nebula.rotation.z = elapsed * 0.002;
+  // Apply mouse parallax
+  const parallaxX = mouseX * 1.5;
+  const parallaxY = mouseY * 1.0;
 
-  // Animate floating objects
-  floatingObjects.forEach(obj => {
-    obj.position.y = obj.userData.initialY + 
-      Math.sin(elapsed * obj.userData.floatSpeed) * obj.userData.floatAmp;
-    obj.rotation.x += obj.userData.rotSpeed * 0.005;
-    obj.rotation.y += obj.userData.rotSpeed * 0.008;
+  camera.position.set(
+    point.x + parallaxX,
+    point.y + parallaxY,
+    point.z
+  );
+
+  // Look ahead along the path
+  lookAtTarget.lerp(lookAhead, 0.08);
+  camera.lookAt(lookAtTarget);
+
+  // Slowly rotate stars
+  stars.rotation.y = elapsed * 0.003;
+
+  // Rotate asteroid belt
+  asteroidBelt.rotation.y = elapsed * 0.02;
+
+  // Update planet shaders and moons
+  planetMeshes.forEach(({ group, planet, sphere, mat }) => {
+    // Show/hide based on camera distance
+    const dist = camera.position.distanceTo(planet.pos);
+    group.visible = dist < 120;
+
+    if (!group.visible) return;
+
+    mat.uniforms.uTime.value = elapsed;
+
+    // Slow planet rotation
+    sphere.rotation.y = elapsed * 0.15;
+
+    // Animate moons
+    group.children.forEach(child => {
+      if (child.userData.orbitRadius) {
+        const angle = elapsed * child.userData.orbitSpeed + child.userData.orbitOffset;
+        child.position.x = Math.cos(angle) * child.userData.orbitRadius;
+        child.position.z = Math.sin(angle) * child.userData.orbitRadius;
+        child.position.y = Math.sin(angle * 0.7) * child.userData.orbitTilt * child.userData.orbitRadius;
+      }
+    });
   });
 
-  // Path shimmer
-  path.material.opacity = 0.25 + Math.sin(elapsed * 2) * 0.15;
+  // Move sun light with camera (so planets are always lit)
+  sunLight.position.set(
+    camera.position.x + 40,
+    camera.position.y + 25,
+    camera.position.z + 30
+  );
+
+  // Update overlays
+  updateOverlays(camera.position);
+
+  // Update nav
+  updateNav();
+
+  // Progress bar
+  progressBar.style.width = (scrollProgress * 100) + '%';
 
   renderer.render(scene, camera);
 }
 
 // ============================================================
-// 12. RESIZE
+// RESIZE
 // ============================================================
 
 window.addEventListener('resize', () => {
@@ -488,11 +663,8 @@ window.addEventListener('resize', () => {
 });
 
 // ============================================================
-// 13. INIT
+// INIT
 // ============================================================
 
-initScrollReveals();
-initFloatingNav();
-initEasterEggs();
-updateCameraFromScroll();
+updateScroll();
 animate();
