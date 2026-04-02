@@ -1,515 +1,384 @@
 /* ============================================================
-   TANISH'S UNIVERSE — 3D Solar System Flythrough
+   TANISH'S UNIVERSE v3 — Physics Sim + Relativistic FX + Star Map
    
-   The camera follows a path through a solar system.
-   Scroll drives progress along the path.
-   Each planet has a position; when the camera is near, an
-   HTML overlay fades in.
+   Navigation: scroll = thrust, star map for direct travel,
+   autopilot to fly to any planet. Free exploration.
+   
+   Physics: Newtonian mechanics with relativistic visual effects
+   at high velocity. c ≈ 200 units/s so you can reach ~0.5c.
+   
+   Relativity: star aberration, Doppler color shift, time dilation.
    ============================================================ */
 
 import * as THREE from 'three';
 
 // ============================================================
-// CONFIG
+// CONSTANTS
 // ============================================================
 
-const TOTAL_SCROLL = 12000;   // matches #scroll-driver height
-const PATH_LENGTH  = 1400;    // z-depth of the entire flight path — spread out!
-const SHOW_RADIUS  = 40;      // distance at which overlay starts showing
-const PEAK_RADIUS  = 20;      // distance at which overlay is fully visible
+const C = 200;              // speed of light in scene units/s
+const DRAG = 0.985;         // velocity drag per frame (gentle coast)
+const THRUST_ACCEL = 120;   // acceleration from scroll (units/s²)
+const AUTOPILOT_SPEED = 80; // cruise speed during autopilot
+const SHOW_RADIUS = 30;     // info card show distance
+const PLANET_RENDER_DIST = 160;
 
-// Planet definitions: name, position in 3D space, visual properties
-const PLANETS = [
+// ============================================================
+// PLANET DATA
+// ============================================================
+
+const PLANET_DATA = [
   {
-    name: 'intro',
-    pos: new THREE.Vector3(0, 0, 0),
-    radius: 0,
-    color: null,
-    t: 0.0,
+    name: 'mauritius', label: 'ORIGIN PLANET', title: 'Mauritius',
+    pos: [40, -8, -200], radius: 6, color: 0x00d4ff, ringColor: 0x33dfff, sub: '',
+    desc: 'Born on a volcanic island in the Indian Ocean. Started tinkering with computers when most kids were tinkering with Legos. Both are valid engineering pursuits.',
+    mapDesc: 'Where it all started',
   },
   {
-    name: 'mauritius',
-    pos: new THREE.Vector3(25, -5, -140),
-    radius: 5,
-    color: 0x00d4ff,
-    ringColor: 0x33dfff,
-    t: 0.1,
+    name: 'sikkim', label: 'CHAPTER II', title: 'Sikkim, India',
+    pos: [-35, 12, -400], radius: 5, color: 0x22c55e, sub: '',
+    desc: 'Moved to the foothills of the Himalayas. Learned that altitude and ambition both take your breath away.',
+    mapDesc: 'Himalayan foothills',
   },
   {
-    name: 'sikkim',
-    pos: new THREE.Vector3(-22, 8, -280),
-    radius: 4,
-    color: 0x22c55e,
-    t: 0.19,
+    name: 'china', label: 'CHAPTER III', title: 'China',
+    pos: [45, -5, -600], radius: 7, color: 0xef4444, ringColor: 0xfbbf24, sub: '',
+    desc: 'Another country, another language to butcher. Continued building things and collecting passport stamps.',
+    mapDesc: 'Passport stamp #3',
   },
   {
-    name: 'china',
-    pos: new THREE.Vector3(28, -4, -420),
-    radius: 6,
-    color: 0xef4444,
-    ringColor: 0xfbbf24,
-    t: 0.28,
+    name: 'uwc', label: 'CHAPTER IV', title: 'UWC Mahindra, India',
+    pos: [-40, 10, -800], radius: 5.5, color: 0xfbbf24, sub: 'IB Diploma',
+    desc: 'International Baccalaureate with HL Math, Physics, and Econ. Surrounded by people from 80+ countries. My worldview expanded faster than my code compiled.',
+    mapDesc: 'Where the worldview expanded',
   },
   {
-    name: 'uwc',
-    pos: new THREE.Vector3(-25, 6, -560),
-    radius: 4.5,
-    color: 0xfbbf24,
-    t: 0.37,
+    name: 'vassar', label: 'CHAPTER V', title: 'Vassar College',
+    pos: [35, -10, -1000], radius: 6.5, color: 0xa855f7, ringColor: 0xd8b4fe,
+    sub: 'B.A. — CS + Economics | 3.97 GPA',
+    desc: 'Double major in Computer Science and Economics, double minor in Physics and Applied Math. Yes, I like learning. No, I don\'t sleep.',
+    mapDesc: 'CS + Economics double major',
   },
   {
-    name: 'vassar',
-    pos: new THREE.Vector3(22, -6, -700),
-    radius: 5.5,
-    color: 0xa855f7,
-    ringColor: 0xd8b4fe,
-    t: 0.48,
+    name: 'work', label: 'CURRENT ORBIT', title: 'Work',
+    pos: [-45, 8, -1250], radius: 8, color: 0x3b82f6, ringColor: 0x60a5fa, sub: '',
+    body: `<h3>Uber <span class="role-tag">Software Engineer</span></h3>
+<p>Building an MCP server for semantic trace analysis on Jaeger. LLM-driven debugging over 10B+ daily spans. Also built a real-time span leak mitigation system that cut trace noise by 40%.</p>
+<div class="tags"><span>Go</span><span>Distributed Systems</span><span>LLMs</span><span>Observability</span></div>
+<h3>Google Research &amp; Brown <span class="role-tag">Research</span></h3>
+<p>Trained Stable Diffusion v1.5 to synthesize novel 3D objects from 51,000+ geometry images. My GPU still hasn't forgiven me.</p>
+<div class="tags"><span>Diffusion Models</span><span>3D ML</span><span>Python</span></div>`,
+    mapDesc: 'Uber + Research',
   },
   {
-    name: 'work',
-    pos: new THREE.Vector3(-28, 4, -860),
-    radius: 7,
-    color: 0x00d4ff,
-    ringColor: 0x00d4ff,
-    t: 0.6,
+    name: 'projects', label: 'SIDE QUESTS', title: 'Projects',
+    pos: [38, -6, -1450], radius: 6.5, color: 0xf472b6, ringColor: 0xa855f7, sub: '',
+    body: `<a href="https://github.com/Bankminer78/cortex" target="_blank" rel="noopener" class="project-link">
+<h3>🧠 Cortex</h3>
+<p>AI productivity monitor for macOS. Captures your screen, classifies activity via LLMs, and intervenes when you start doomscrolling.</p>
+<span class="mono">SwiftUI · ScreenCaptureKit · OpenAI</span>
+</a>
+<a href="https://github.com/tanwasp/lenz-ai" target="_blank" rel="noopener" class="project-link">
+<h3>🔮 Lenz AI</h3>
+<p>Rewrites web content in real-time based on your personal knowledge profile. The internet, adapted to you.</p>
+<span class="mono">Electron · React · FastAPI · OpenAI</span>
+</a>
+<a href="https://thelunchboxapp.com" target="_blank" rel="noopener" class="project-link">
+<h3>🍱 LunchBox</h3>
+<p>Social platform for restaurant tracking. Because spreadsheets of restaurant names deserve a better home.</p>
+<span class="mono">React Native · Firebase · Node.js</span>
+</a>`,
+    mapDesc: 'Cortex, Lenz AI, LunchBox',
   },
   {
-    name: 'projects',
-    pos: new THREE.Vector3(24, -5, -1000),
-    radius: 5.5,
-    color: 0xf472b6,
-    ringColor: 0xa855f7,
-    t: 0.72,
+    name: 'about', label: 'EVIDENCE I TOUCH GRASS', title: 'Beyond the Code',
+    pos: [-32, 14, -1650], radius: 5.5, color: 0xfbbf24, sub: '',
+    body: `<div class="about-item"><strong>🎸 Guitar</strong> — Currently learning. My neighbors are very patient people.</div>
+<div class="about-item"><strong>🏃 Running</strong> — Chasing a sub-20 5K. The only race condition I actually want to debug.</div>
+<div class="about-item"><strong>🛶 Kayaking</strong> — Frequently capsize. Always blame the current.</div>
+<div class="about-item"><strong>🍳 Cooking</strong> — Japanese curry specialist. Thai green curry enthusiast. Hotpot evangelist.</div>
+<div class="about-item"><strong>💪 Fitness</strong> — Working toward 10 clean pull-ups and visible abs. The pull-ups are going better.</div>
+<div class="about-item"><strong>🌍 Travel</strong> — 6 countries before 22. Collecting cultures faster than npm packages.</div>`,
+    mapDesc: 'Hobbies & interests',
   },
   {
-    name: 'about',
-    pos: new THREE.Vector3(-20, 7, -1140),
-    radius: 4.8,
-    color: 0xfbbf24,
-    t: 0.83,
-  },
-  {
-    name: 'contact',
-    pos: new THREE.Vector3(0, 0, -1320),
-    radius: 8,
-    color: 0x00d4ff,
-    ringColor: 0xa855f7,
-    t: 0.95,
+    name: 'contact', label: 'TRANSMISSION OPEN', title: "Let's Talk",
+    pos: [0, 0, -1900], radius: 9, color: 0x00d4ff, ringColor: 0xa855f7, sub: '',
+    body: `<p>I'm always up for conversations about distributed systems, ML, side projects, or which NYC restaurant deserves a spot in my LunchBox.</p>
+<div class="contact-btns">
+<a href="mailto:tanishwas@gmail.com" class="btn btn--primary">tanishwas@gmail.com</a>
+<a href="https://github.com/tanwasp" target="_blank" rel="noopener" class="btn btn--ghost">GitHub</a>
+<a href="https://www.linkedin.com/in/tanish-pradhan-wong-ah-sui" target="_blank" rel="noopener" class="btn btn--ghost">LinkedIn</a>
+</div>
+<a href="./magic-portfolio" class="boring-link mono">Looking for the boring version? →</a>`,
+    mapDesc: 'Get in touch',
   },
 ];
 
 // ============================================================
-// RENDERER SETUP
+// RENDERER
 // ============================================================
 
 const canvas = document.getElementById('cosmos');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(0x030308, 1);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x030308, 0.004);
+scene.fog = new THREE.FogExp2(0x030308, 0.003);
 
-const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 3000);
 camera.position.set(0, 0, 30);
+camera.lookAt(0, 0, -100);
+
+// Forward direction
+const forward = new THREE.Vector3(0, 0, -1);
 
 // ============================================================
 // LIGHTING
 // ============================================================
 
-const ambient = new THREE.AmbientLight(0x111122, 0.8);
-scene.add(ambient);
-
-const sunLight = new THREE.PointLight(0xffffff, 2.5, 1500);
+scene.add(new THREE.AmbientLight(0x111122, 0.8));
+const sunLight = new THREE.PointLight(0xffffff, 2.5, 2000);
 sunLight.position.set(50, 30, 20);
 scene.add(sunLight);
 
-const fillLight = new THREE.PointLight(0x00d4ff, 0.6, 1000);
-fillLight.position.set(-40, -20, -400);
-scene.add(fillLight);
-
 // ============================================================
-// STARFIELD
+// STARFIELD — custom shader with aberration support
 // ============================================================
 
-function createStarfield() {
-  const count = 5000;
-  const geo = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  const sizes = new Float32Array(count);
+const STAR_COUNT = 6000;
+const starGeo = new THREE.BufferGeometry();
+const starPositions = new Float32Array(STAR_COUNT * 3);
+const starBasePositions = new Float32Array(STAR_COUNT * 3); // original positions for aberration
+const starColors = new Float32Array(STAR_COUNT * 3);
+const starSizes = new Float32Array(STAR_COUNT);
 
-  for (let i = 0; i < count; i++) {
-    const i3 = i * 3;
-    const r = 300 + Math.random() * 900;
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    positions[i3]     = r * Math.sin(phi) * Math.cos(theta);
-    positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-    positions[i3 + 2] = r * Math.cos(phi) - PATH_LENGTH * 0.5;
-    sizes[i] = Math.random() * 1.8 + 0.3;
-  }
+const starColorChoices = [
+  [0.85, 0.88, 1.0],   // white-blue
+  [1.0, 0.95, 0.8],    // warm white
+  [0.7, 0.8, 1.0],     // blue
+  [1.0, 0.85, 0.7],    // orange-ish
+];
 
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+for (let i = 0; i < STAR_COUNT; i++) {
+  const i3 = i * 3;
+  // Distribute in a sphere centered on origin, shifted to cover path
+  const r = 250 + Math.random() * 800;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  const x = r * Math.sin(phi) * Math.cos(theta);
+  const y = r * Math.sin(phi) * Math.sin(theta);
+  const z = r * Math.cos(phi) - 900; // center on midpoint of journey
 
-  const mat = new THREE.ShaderMaterial({
-    vertexShader: `
-      attribute float size;
-      varying float vAlpha;
-      void main() {
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        float d = length(mv.xyz);
-        vAlpha = clamp(1.0 - d / 700.0, 0.05, 1.0);
-        gl_PointSize = size * (250.0 / -mv.z);
-        gl_Position = projectionMatrix * mv;
-      }
-    `,
-    fragmentShader: `
-      varying float vAlpha;
-      void main() {
-        float d = length(gl_PointCoord - 0.5);
-        if (d > 0.5) discard;
-        float glow = smoothstep(0.5, 0.0, d);
-        gl_FragColor = vec4(vec3(0.85, 0.88, 1.0), glow * vAlpha);
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
+  starPositions[i3] = starBasePositions[i3] = x;
+  starPositions[i3 + 1] = starBasePositions[i3 + 1] = y;
+  starPositions[i3 + 2] = starBasePositions[i3 + 2] = z;
 
-  return new THREE.Points(geo, mat);
+  const col = starColorChoices[Math.floor(Math.random() * starColorChoices.length)];
+  starColors[i3] = col[0];
+  starColors[i3 + 1] = col[1];
+  starColors[i3 + 2] = col[2];
+
+  starSizes[i] = 0.4 + Math.random() * 2.0;
 }
 
-const stars = createStarfield();
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+starGeo.setAttribute('size', new THREE.BufferAttribute(starSizes, 1));
+
+const starMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uBeta: { value: 0 },           // v/c
+    uForward: { value: forward.clone() },
+  },
+  vertexShader: `
+    attribute float size;
+    attribute vec3 color;
+    varying vec3 vColor;
+    varying float vAlpha;
+    uniform float uBeta;
+    uniform vec3 uForward;
+    void main() {
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      float d = length(mv.xyz);
+      vAlpha = clamp(1.0 - d / 800.0, 0.05, 1.0);
+
+      // Doppler color shift: blueshift ahead, redshift behind
+      vec3 toStar = normalize(position - cameraPosition);
+      float cosTheta = dot(toStar, uForward);
+      float dopplerFactor = 1.0 + uBeta * cosTheta * 0.6;
+      vColor = color * dopplerFactor;
+
+      // Size boost for stars ahead at high speed (aberration bunching)
+      float aberrationBoost = 1.0 + max(cosTheta, 0.0) * uBeta * 1.5;
+      gl_PointSize = size * aberrationBoost * (250.0 / max(-mv.z, 1.0));
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vColor;
+    varying float vAlpha;
+    void main() {
+      float d = length(gl_PointCoord - 0.5);
+      if (d > 0.5) discard;
+      float glow = smoothstep(0.5, 0.0, d);
+      gl_FragColor = vec4(vColor, glow * vAlpha);
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+});
+
+const stars = new THREE.Points(starGeo, starMat);
 scene.add(stars);
 
-// ============================================================
-// DISTANT GALAXY / NEBULA SPRITES
-// ============================================================
-
-// Subtle dust particles along the path for depth
-function addDustParticles() {
-  const count = 1500;
+// Dust particles
+(function addDust() {
+  const count = 2000;
   const geo = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
+  const pos = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    const i3 = i * 3;
-    positions[i3]     = (Math.random() - 0.5) * 80;
-    positions[i3 + 1] = (Math.random() - 0.5) * 40;
-    positions[i3 + 2] = -Math.random() * PATH_LENGTH * 1.1;
+    pos[i * 3] = (Math.random() - 0.5) * 100;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 60;
+    pos[i * 3 + 2] = -Math.random() * 2000;
   }
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const mat = new THREE.PointsMaterial({
-    color: 0x4466aa,
-    size: 0.15,
-    transparent: true,
-    opacity: 0.3,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    color: 0x334466, size: 0.12, transparent: true, opacity: 0.3,
+    depthWrite: false, blending: THREE.AdditiveBlending,
   });
   scene.add(new THREE.Points(geo, mat));
-}
-
-addDustParticles();
+})();
 
 // ============================================================
 // PLANETS — 3D objects
 // ============================================================
 
-const planetMeshes = [];
+const planets = []; // { group, data, sphere, mat }
 
-PLANETS.forEach(p => {
-  if (!p.color || p.radius === 0) return;
-
+PLANET_DATA.forEach(p => {
   const group = new THREE.Group();
-  group.position.copy(p.pos);
+  group.position.set(...p.pos);
+  group.visible = false;
 
-  // Main sphere — custom shader for glow effect
+  // Sphere with glow shader
   const geo = new THREE.SphereGeometry(p.radius, 48, 48);
   const mat = new THREE.ShaderMaterial({
     vertexShader: `
-      varying vec3 vNormal;
-      varying vec3 vViewDir;
+      varying vec3 vNormal; varying vec3 vViewDir;
       void main() {
         vNormal = normalize(normalMatrix * normal);
-        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-        vViewDir = normalize(-mvPos.xyz);
-        gl_Position = projectionMatrix * mvPos;
-      }
-    `,
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vViewDir = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
     fragmentShader: `
-      uniform vec3 uColor;
-      uniform float uTime;
-      varying vec3 vNormal;
-      varying vec3 vViewDir;
+      uniform vec3 uColor; uniform float uTime;
+      varying vec3 vNormal; varying vec3 vViewDir;
       void main() {
         float fresnel = pow(1.0 - dot(vNormal, vViewDir), 3.0);
         float rim = fresnel * 0.7;
         float core = max(dot(vNormal, vec3(0.5, 0.5, 0.3)), 0.0) * 0.4;
         float pulse = 0.9 + 0.1 * sin(uTime * 0.8);
-        vec3 col = uColor * (core + rim + 0.15) * pulse;
-        gl_FragColor = vec4(col, 0.85);
-      }
-    `,
-    uniforms: {
-      uColor: { value: new THREE.Color(p.color) },
-      uTime: { value: 0 },
-    },
+        gl_FragColor = vec4(uColor * (core + rim + 0.15) * pulse, 0.85);
+      }`,
+    uniforms: { uColor: { value: new THREE.Color(p.color) }, uTime: { value: 0 } },
     transparent: true,
-    side: THREE.FrontSide,
   });
-
   const sphere = new THREE.Mesh(geo, mat);
   group.add(sphere);
 
-  // Atmosphere glow
+  // Atmosphere
   const glowGeo = new THREE.SphereGeometry(p.radius * 1.25, 32, 32);
   const glowMat = new THREE.ShaderMaterial({
-    vertexShader: `
-      varying vec3 vNormal;
-      varying vec3 vViewDir;
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-        vViewDir = normalize(-mvPos.xyz);
-        gl_Position = projectionMatrix * mvPos;
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uColor;
-      varying vec3 vNormal;
-      varying vec3 vViewDir;
-      void main() {
-        float intensity = pow(0.65 - dot(vNormal, vViewDir), 2.5);
-        gl_FragColor = vec4(uColor, intensity * 0.5);
-      }
-    `,
-    uniforms: {
-      uColor: { value: new THREE.Color(p.color) },
-    },
-    transparent: true,
-    side: THREE.BackSide,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
+    vertexShader: `varying vec3 vNormal; varying vec3 vViewDir;
+      void main() { vNormal = normalize(normalMatrix * normal);
+      vec4 mv = modelViewMatrix * vec4(position,1.0); vViewDir = normalize(-mv.xyz);
+      gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uColor; varying vec3 vNormal; varying vec3 vViewDir;
+      void main() { float i = pow(0.65 - dot(vNormal, vViewDir), 2.5);
+      gl_FragColor = vec4(uColor, i * 0.5); }`,
+    uniforms: { uColor: { value: new THREE.Color(p.color) } },
+    transparent: true, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false,
   });
-  const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-  group.add(glowMesh);
+  group.add(new THREE.Mesh(glowGeo, glowMat));
 
-  // Rings (if defined)
+  // Rings
   if (p.ringColor) {
-    const ringGeo = new THREE.TorusGeometry(p.radius * 1.8, 0.15, 2, 80);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: p.ringColor,
-      transparent: true,
-      opacity: 0.25,
-      side: THREE.DoubleSide,
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(p.radius * 1.8, 0.15, 2, 80),
+      new THREE.MeshBasicMaterial({ color: p.ringColor, transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+    );
     ring.rotation.x = Math.PI * 0.45;
-    ring.rotation.y = Math.random() * 0.5;
     group.add(ring);
   }
 
-  // Small orbiting moons
-  const moonCount = Math.floor(Math.random() * 3) + 1;
-  for (let i = 0; i < moonCount; i++) {
-    const moonGeo = new THREE.SphereGeometry(0.2 + Math.random() * 0.3, 12, 12);
-    const moonMat = new THREE.MeshBasicMaterial({
-      color: 0xcccccc,
-      transparent: true,
-      opacity: 0.6,
-    });
-    const moon = new THREE.Mesh(moonGeo, moonMat);
-    moon.userData.orbitRadius = p.radius * 2 + i * 1.5;
-    moon.userData.orbitSpeed = 0.3 + Math.random() * 0.5;
-    moon.userData.orbitOffset = Math.random() * Math.PI * 2;
-    moon.userData.orbitTilt = (Math.random() - 0.5) * 0.6;
+  // Moons
+  const moonCount = 1 + Math.floor(Math.random() * 2);
+  for (let m = 0; m < moonCount; m++) {
+    const moon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.25 + Math.random() * 0.3, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.6 })
+    );
+    moon.userData = {
+      orbitR: p.radius * 2 + m * 1.5,
+      orbitSpeed: 0.3 + Math.random() * 0.5,
+      orbitOff: Math.random() * Math.PI * 2,
+      orbitTilt: (Math.random() - 0.5) * 0.6,
+    };
     group.add(moon);
   }
 
   scene.add(group);
-  group.visible = false; // hidden until camera is near
-  planetMeshes.push({ group, planet: p, sphere, mat });
+  planets.push({ group, data: p, sphere, mat });
 });
 
-// ============================================================
-// ASTEROID BELT (between journey and work sections)
-// ============================================================
-
-function createAsteroidBelt() {
+// Asteroid belt
+(function addBelt() {
   const count = 300;
   const geo = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  const sizes = new Float32Array(count);
-
-  const beltZ = -780; // between vassar and work
+  const pos = new Float32Array(count * 3);
+  const beltZ = -1120;
   for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = 15 + Math.random() * 25;
-    const i3 = i * 3;
-    positions[i3]     = Math.cos(angle) * r;
-    positions[i3 + 1] = (Math.random() - 0.5) * 5;
-    positions[i3 + 2] = beltZ + (Math.random() - 0.5) * 30;
-    sizes[i] = 0.3 + Math.random() * 0.8;
+    const a = Math.random() * Math.PI * 2;
+    const r = 18 + Math.random() * 30;
+    pos[i * 3] = Math.cos(a) * r;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 5;
+    pos[i * 3 + 2] = beltZ + (Math.random() - 0.5) * 40;
   }
-
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-  const mat = new THREE.PointsMaterial({
-    color: 0x888888,
-    size: 0.6,
-    transparent: true,
-    opacity: 0.5,
-    depthWrite: false,
-  });
-
-  const belt = new THREE.Points(geo, mat);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const belt = new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0x888888, size: 0.5, transparent: true, opacity: 0.4, depthWrite: false,
+  }));
   scene.add(belt);
-  return belt;
-}
-
-const asteroidBelt = createAsteroidBelt();
+})();
 
 // ============================================================
-// CAMERA PATH — smooth curve through the solar system
+// PHYSICS STATE
 // ============================================================
 
-// Build a CatmullRom spline through key waypoints
-// The camera will follow this path based on scroll progress
-const pathPoints = [];
-
-// Start: slightly in front of origin
-pathPoints.push(new THREE.Vector3(0, 0, 30));
-
-// For each planet, create an approach point (fly near it, not into it)
-PLANETS.forEach(p => {
-  if (p.name === 'intro') return;
-  // Camera approaches from slightly to the left of the planet
-  const offset = new THREE.Vector3(
-    p.pos.x < 0 ? p.pos.x + p.radius + 12 : p.pos.x - p.radius - 12,
-    p.pos.y + 2,
-    p.pos.z + 5
-  );
-  pathPoints.push(offset);
-});
-
-// End: past the last planet
-pathPoints.push(new THREE.Vector3(0, 0, -PATH_LENGTH - 20));
-
-const cameraPath = new THREE.CatmullRomCurve3(pathPoints, false, 'catmullrom', 0.3);
+let velocity = 0;           // current scalar speed (units/s)
+let shipTime = 0;           // proper time (dilated)
+let thrust = 0;             // current thrust input
+let autopilot = null;       // { target: Vector3, name: string } or null
 
 // ============================================================
-// SCROLL → CAMERA POSITION
+// SCROLL → THRUST
 // ============================================================
 
-let scrollProgress = 0;
-let targetScrollProgress = 0;
+let scrollAccum = 0;
 
-function updateScroll() {
-  const maxScroll = TOTAL_SCROLL - window.innerHeight;
-  const rawProgress = window.scrollY / maxScroll;
-  targetScrollProgress = Math.max(0, Math.min(1, rawProgress));
-}
-
-window.addEventListener('scroll', updateScroll, { passive: true });
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  // Down scroll = forward thrust, up = brake
+  scrollAccum += e.deltaY * 0.8;
+}, { passive: false });
 
 // ============================================================
-// OVERLAY VISIBILITY
-// ============================================================
-
-const overlays = {};
-document.querySelectorAll('.overlay').forEach(el => {
-  overlays[el.dataset.planet] = el;
-});
-
-// Set overlay card position: if planet is on the right (x > 0), 
-// put the card on the left, and vice versa
-PLANETS.forEach(p => {
-  const el = overlays[p.name];
-  if (!el || p.name === 'intro') return;
-  // Planet on the right → card on the left (default), planet on left → card on right
-  if (Math.abs(p.pos.x) < 5) {
-    el.dataset.side = 'center';
-  } else {
-    el.dataset.side = p.pos.x > 0 ? 'left' : 'right';
-  }
-});
-
-function updateOverlays(camPos) {
-  let closestPlanet = null;
-  let closestDist = Infinity;
-
-  PLANETS.forEach(p => {
-    const dist = camPos.distanceTo(p.pos);
-    if (dist < closestDist) {
-      closestDist = dist;
-      closestPlanet = p;
-    }
-  });
-
-  PLANETS.forEach(p => {
-    const el = overlays[p.name];
-    if (!el) return;
-
-    const dist = camPos.distanceTo(p.pos);
-    const showDist = p.name === 'intro' ? 35 : SHOW_RADIUS;
-    const peakDist = p.name === 'intro' ? 15 : PEAK_RADIUS;
-
-    if (dist < showDist && closestPlanet === p) {
-      const alpha = 1 - Math.max(0, Math.min(1, (dist - peakDist) / (showDist - peakDist)));
-      el.style.opacity = alpha;
-      el.classList.toggle('visible', alpha > 0.1);
-    } else {
-      el.style.opacity = 0;
-      el.classList.remove('visible');
-    }
-  });
-}
-
-// ============================================================
-// NAV DOTS
-// ============================================================
-
-const navPips = document.querySelectorAll('.nav-pip');
-
-navPips.forEach(pip => {
-  pip.addEventListener('click', () => {
-    const targetName = pip.dataset.planet;
-    const planet = PLANETS.find(p => p.name === targetName);
-    if (!planet) return;
-
-    // Scroll to the right position
-    const maxScroll = TOTAL_SCROLL - window.innerHeight;
-    const targetScroll = planet.t * maxScroll;
-    window.scrollTo({ top: targetScroll, behavior: 'smooth' });
-  });
-});
-
-function updateNav() {
-  // Find which planet we're closest to
-  let activeName = 'intro';
-  let minDist = Infinity;
-
-  PLANETS.forEach(p => {
-    const dist = Math.abs(scrollProgress - p.t);
-    if (dist < minDist) {
-      minDist = dist;
-      activeName = p.name;
-    }
-  });
-
-  navPips.forEach(pip => {
-    pip.classList.toggle('active', pip.dataset.planet === activeName);
-  });
-}
-
-// Progress bar
-const progressBar = document.getElementById('progress-bar');
-
-// ============================================================
-// MOUSE PARALLAX
+// MOUSE LOOK (subtle)
 // ============================================================
 
 let mouseX = 0, mouseY = 0;
@@ -519,135 +388,327 @@ document.addEventListener('mousemove', e => {
 });
 
 // ============================================================
+// HUD ELEMENTS
+// ============================================================
+
+const hudVel = document.getElementById('hud-vel');
+const hudVelBar = document.getElementById('hud-vel-bar');
+const hudGamma = document.getElementById('hud-gamma');
+const hudTau = document.getElementById('hud-tau');
+const hudNearest = document.getElementById('hud-nearest');
+const hudDist = document.getElementById('hud-dist');
+const hudHeading = document.getElementById('hud-heading');
+const hudHint = document.getElementById('hud-hint');
+
+// ============================================================
+// INTRO OVERLAY
+// ============================================================
+
+const introOverlay = document.getElementById('intro-overlay');
+let introVisible = true;
+
+// ============================================================
+// PLANET INFO CARD
+// ============================================================
+
+const planetInfoEl = document.getElementById('planet-info');
+const infoCard = document.getElementById('info-card');
+const infoLabel = document.getElementById('info-label');
+const infoTitle = document.getElementById('info-title');
+const infoSub = document.getElementById('info-sub');
+const infoBody = document.getElementById('info-body');
+
+let currentInfoPlanet = null;
+
+function showPlanetInfo(pData) {
+  if (currentInfoPlanet === pData.name) return;
+  currentInfoPlanet = pData.name;
+
+  infoLabel.textContent = pData.label;
+  infoTitle.textContent = pData.title;
+  infoSub.textContent = pData.sub || '';
+  infoSub.style.display = pData.sub ? 'block' : 'none';
+  infoBody.innerHTML = pData.body || `<p>${pData.desc}</p>`;
+
+  // Position card on opposite side of planet
+  const px = pData.pos[0];
+  if (px > 5) {
+    infoCard.classList.add('info-card--left');
+  } else if (px < -5) {
+    infoCard.classList.remove('info-card--left');
+  } else {
+    infoCard.classList.remove('info-card--left');
+  }
+
+  planetInfoEl.classList.remove('hidden');
+}
+
+function hidePlanetInfo() {
+  planetInfoEl.classList.add('hidden');
+  currentInfoPlanet = null;
+}
+
+// ============================================================
+// STAR MAP
+// ============================================================
+
+const starmapEl = document.getElementById('starmap');
+const starmapGrid = document.getElementById('starmap-grid');
+let starmapOpen = false;
+
+function buildStarMap() {
+  starmapGrid.innerHTML = '';
+  PLANET_DATA.forEach(p => {
+    const dist = camera.position.distanceTo(new THREE.Vector3(...p.pos));
+    const ly = (dist / 50).toFixed(1); // arbitrary units → "light-years"
+
+    const item = document.createElement('div');
+    item.className = 'starmap-item';
+    item.innerHTML = `
+      <div>
+        <span class="starmap-item__dot" style="color:#${new THREE.Color(p.color).getHexString()};background:#${new THREE.Color(p.color).getHexString()}"></span>
+        <span class="starmap-item__name">${p.title}</span>
+      </div>
+      <p class="starmap-item__desc">${p.mapDesc}</p>
+      <p class="starmap-item__dist">${ly} ly away</p>
+    `;
+    item.addEventListener('click', () => {
+      startAutopilot(p);
+      toggleStarMap(false);
+    });
+    starmapGrid.appendChild(item);
+  });
+}
+
+function toggleStarMap(show) {
+  starmapOpen = typeof show === 'boolean' ? show : !starmapOpen;
+  if (starmapOpen) {
+    buildStarMap();
+    starmapEl.classList.remove('hidden');
+  } else {
+    starmapEl.classList.add('hidden');
+  }
+}
+
+document.getElementById('map-btn').addEventListener('click', () => toggleStarMap());
+document.getElementById('starmap-close').addEventListener('click', () => toggleStarMap(false));
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'm' || e.key === 'M') toggleStarMap();
+  if (e.key === 'Escape') {
+    if (starmapOpen) toggleStarMap(false);
+    if (document.getElementById('easter-egg').classList.contains('hidden') === false)
+      document.getElementById('easter-egg').classList.add('hidden');
+  }
+});
+
+// ============================================================
+// AUTOPILOT
+// ============================================================
+
+const apIndicator = document.getElementById('autopilot-indicator');
+const apDest = document.getElementById('ap-dest');
+
+function startAutopilot(pData) {
+  autopilot = {
+    target: new THREE.Vector3(...pData.pos).add(
+      // Stop a bit before the planet (not inside it)
+      new THREE.Vector3(pData.pos[0] > 0 ? -pData.radius - 15 : pData.radius + 15, 2, pData.radius + 10)
+    ),
+    name: pData.title,
+  };
+  apDest.textContent = pData.title.toUpperCase();
+  apIndicator.classList.remove('hidden');
+}
+
+function stopAutopilot() {
+  autopilot = null;
+  apIndicator.classList.add('hidden');
+}
+
+document.getElementById('ap-cancel').addEventListener('click', stopAutopilot);
+
+// ============================================================
 // EASTER EGGS
 // ============================================================
 
-function initEasterEggs() {
-  const konamiCode = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];
-  let konamiIndex = 0;
-
-  const overlay = document.createElement('div');
-  overlay.id = 'easter-egg';
-  overlay.innerHTML = `
-    <div>
-      <h2>🎮 Achievement Unlocked</h2>
-      <p>You found the Konami Code easter egg.</p>
-      <p style="color: #00d4ff; margin-top: 1rem;">
-        "The answer to the ultimate question of life,<br/>
-        the universe, and everything is 42."
-      </p>
-      <p class="close-hint">Press Escape or click anywhere to close</p>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-
+(function initEasterEggs() {
+  const konamiCode = [38,38,40,40,37,39,37,39,66,65];
+  let ki = 0;
+  const ee = document.getElementById('easter-egg');
   document.addEventListener('keydown', e => {
-    if (e.keyCode === konamiCode[konamiIndex]) {
-      konamiIndex++;
-      if (konamiIndex === konamiCode.length) {
-        overlay.classList.add('show');
-        konamiIndex = 0;
-      }
-    } else {
-      konamiIndex = 0;
-    }
-    if (e.key === 'Escape') overlay.classList.remove('show');
+    if (e.keyCode === konamiCode[ki]) { ki++; if (ki === konamiCode.length) { ee.classList.remove('hidden'); ki = 0; } }
+    else ki = 0;
   });
+  ee.addEventListener('click', () => ee.classList.add('hidden'));
 
-  overlay.addEventListener('click', () => overlay.classList.remove('show'));
-
-  console.log(
-    '%c🚀 Hey, you found the console! ',
-    'font-size: 16px; font-weight: bold; color: #00d4ff; background: #030308; padding: 10px; border-radius: 4px;'
-  );
-  console.log(
-    '%cIf you\'re reading this, you\'re probably a developer. We should talk.\ntanishwas@gmail.com',
-    'font-size: 12px; color: #a855f7; background: #030308; padding: 6px;'
-  );
-}
-
-initEasterEggs();
+  console.log('%c🚀 Welcome to the console! ', 'font-size:16px;color:#00d4ff;background:#030308;padding:10px;border-radius:4px;font-weight:bold;');
+  console.log('%ctanishwas@gmail.com — let\'s talk.', 'font-size:12px;color:#a855f7;background:#030308;padding:6px;');
+})();
 
 // ============================================================
 // ANIMATION LOOP
 // ============================================================
 
 const clock = new THREE.Clock();
-const lookAtTarget = new THREE.Vector3();
+const camLook = new THREE.Vector3(0, 0, -100);
 
 function animate() {
   requestAnimationFrame(animate);
 
+  const dt = Math.min(clock.getDelta(), 0.05); // cap dt
   const elapsed = clock.getElapsedTime();
-  const dt = clock.getDelta();
 
-  // Smooth scroll interpolation
-  scrollProgress += (targetScrollProgress - scrollProgress) * 0.06;
+  // --- THRUST from scroll ---
+  thrust = scrollAccum * 2;
+  scrollAccum *= 0.85; // decay scroll input
 
-  // Get camera position from path
-  const t = Math.max(0.0001, Math.min(0.9999, scrollProgress));
-  const point = cameraPath.getPointAt(t);
-  const lookAhead = cameraPath.getPointAt(Math.min(t + 0.02, 0.9999));
+  // --- AUTOPILOT ---
+  if (autopilot) {
+    const dir = autopilot.target.clone().sub(camera.position);
+    const dist = dir.length();
+    if (dist < 8) {
+      stopAutopilot();
+      velocity *= 0.3; // decelerate on arrival
+    } else {
+      dir.normalize();
+      forward.lerp(dir, 0.03).normalize();
+      // Ramp speed based on distance
+      const targetSpeed = Math.min(AUTOPILOT_SPEED, dist * 0.5);
+      velocity += (targetSpeed - velocity) * 0.05;
+    }
+  } else {
+    // --- MANUAL FLIGHT ---
+    if (thrust > 0) {
+      velocity += THRUST_ACCEL * dt * (thrust / 100);
+    } else if (thrust < 0) {
+      velocity += THRUST_ACCEL * dt * (thrust / 100) * 0.5; // brake weaker
+    }
+  }
 
-  // Apply mouse parallax
-  const parallaxX = mouseX * 1.5;
-  const parallaxY = mouseY * 1.0;
+  // Clamp velocity
+  velocity = Math.max(0, Math.min(velocity, C * 0.95));
+  velocity *= DRAG;
+  if (velocity < 0.01) velocity = 0;
 
-  camera.position.set(
-    point.x + parallaxX,
-    point.y + parallaxY,
-    point.z
-  );
+  // --- RELATIVISTIC CALCULATIONS ---
+  const beta = velocity / C;
+  const gamma = 1 / Math.sqrt(1 - beta * beta);
+  const properDt = dt / gamma; // time dilation
+  shipTime += properDt;
 
-  // Look ahead along the path
-  lookAtTarget.lerp(lookAhead, 0.08);
-  camera.lookAt(lookAtTarget);
+  // --- MOVE CAMERA ---
+  camera.position.addScaledVector(forward, velocity * dt);
 
-  // Slowly rotate stars
-  stars.rotation.y = elapsed * 0.003;
+  // Mouse look (subtle yaw/pitch)
+  const lookOffset = new THREE.Vector3(mouseX * 2, -mouseY * 1.5, 0);
+  camLook.copy(camera.position).add(forward.clone().multiplyScalar(50)).add(lookOffset);
+  camera.lookAt(camLook);
 
-  // Rotate asteroid belt
-  asteroidBelt.rotation.y = elapsed * 0.02;
+  // Move sun with camera
+  sunLight.position.set(camera.position.x + 40, camera.position.y + 25, camera.position.z + 30);
 
-  // Update planet shaders and moons
-  planetMeshes.forEach(({ group, planet, sphere, mat }) => {
-    // Show/hide based on camera distance
-    const dist = camera.position.distanceTo(planet.pos);
-    group.visible = dist < 120;
+  // --- STAR ABERRATION SHADER ---
+  starMat.uniforms.uBeta.value = beta;
+  starMat.uniforms.uForward.value.copy(forward);
 
+  // Slowly rotate starfield
+  stars.rotation.y = elapsed * 0.002;
+
+  // --- PLANET UPDATES ---
+  let nearestPlanet = null;
+  let nearestDist = Infinity;
+
+  planets.forEach(({ group, data, sphere, mat }) => {
+    const pPos = new THREE.Vector3(...data.pos);
+    const dist = camera.position.distanceTo(pPos);
+
+    group.visible = dist < PLANET_RENDER_DIST;
     if (!group.visible) return;
 
     mat.uniforms.uTime.value = elapsed;
+    sphere.rotation.y = elapsed * 0.12;
 
-    // Slow planet rotation
-    sphere.rotation.y = elapsed * 0.15;
-
-    // Animate moons
+    // Moons
     group.children.forEach(child => {
-      if (child.userData.orbitRadius) {
-        const angle = elapsed * child.userData.orbitSpeed + child.userData.orbitOffset;
-        child.position.x = Math.cos(angle) * child.userData.orbitRadius;
-        child.position.z = Math.sin(angle) * child.userData.orbitRadius;
-        child.position.y = Math.sin(angle * 0.7) * child.userData.orbitTilt * child.userData.orbitRadius;
-      }
+      if (!child.userData.orbitR) return;
+      const a = elapsed * child.userData.orbitSpeed + child.userData.orbitOff;
+      child.position.x = Math.cos(a) * child.userData.orbitR;
+      child.position.z = Math.sin(a) * child.userData.orbitR;
+      child.position.y = Math.sin(a * 0.7) * child.userData.orbitTilt * child.userData.orbitR;
     });
+
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearestPlanet = data;
+    }
   });
 
-  // Move sun light with camera (so planets are always lit)
-  sunLight.position.set(
-    camera.position.x + 40,
-    camera.position.y + 25,
-    camera.position.z + 30
-  );
+  // --- INTRO OVERLAY ---
+  if (introVisible && velocity > 2) {
+    introOverlay.style.opacity = '0';
+    introVisible = false;
+    setTimeout(() => { introOverlay.style.pointerEvents = 'none'; }, 800);
+  }
+  if (!introVisible && velocity < 0.5 && camera.position.z > 10) {
+    introOverlay.style.opacity = '1';
+    introOverlay.style.pointerEvents = '';
+    introVisible = true;
+  }
 
-  // Update overlays
-  updateOverlays(camera.position);
+  // --- PLANET INFO CARD ---
+  if (nearestPlanet && nearestDist < SHOW_RADIUS && velocity < 15) {
+    showPlanetInfo(nearestPlanet);
+  } else {
+    hidePlanetInfo();
+  }
 
-  // Update nav
-  updateNav();
+  // --- HUD ---
+  hudVel.textContent = beta.toFixed(3) + 'c';
+  hudVelBar.style.width = (beta * 100 / 0.95) + '%';
+  hudGamma.textContent = gamma.toFixed(3);
 
-  // Progress bar
-  progressBar.style.width = (scrollProgress * 100) + '%';
+  // Format ship time as mm:ss.f
+  const totalSec = shipTime;
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  hudTau.textContent = String(mins).padStart(2, '0') + ':' + secs.toFixed(1).padStart(4, '0');
+
+  if (nearestPlanet) {
+    hudNearest.textContent = nearestPlanet.title;
+    const ly = (nearestDist / 50).toFixed(1);
+    hudDist.textContent = ly + ' ly';
+  } else {
+    hudNearest.textContent = '—';
+    hudDist.textContent = '— ly';
+  }
+
+  // Heading (yaw angle)
+  const yaw = Math.atan2(forward.x, -forward.z) * (180 / Math.PI);
+  hudHeading.textContent = ((yaw + 360) % 360).toFixed(0).padStart(3, '0') + '°';
+
+  // Hint text updates
+  if (velocity > 5 && !autopilot) {
+    hudHint.textContent = beta > 0.3
+      ? '⚡ RELATIVISTIC — stars compress ahead (aberration)'
+      : 'CRUISING — scroll up to brake';
+  } else if (autopilot) {
+    hudHint.textContent = `AUTOPILOT to ${autopilot.name}`;
+  } else {
+    hudHint.textContent = 'SCROLL to thrust · M for star map · click planets to autopilot';
+  }
+
+  // Color the velocity value based on beta
+  if (beta > 0.5) {
+    hudVel.style.color = '#f472b6'; // rose at high velocity
+    hudVel.style.textShadow = '0 0 12px rgba(244,114,182,0.5)';
+  } else if (beta > 0.2) {
+    hudVel.style.color = '#a855f7'; // violet at medium
+    hudVel.style.textShadow = '0 0 10px rgba(168,85,247,0.4)';
+  } else {
+    hudVel.style.color = '#00d4ff'; // cyan at low
+    hudVel.style.textShadow = '0 0 10px rgba(0,212,255,0.4)';
+  }
 
   renderer.render(scene, camera);
 }
@@ -666,5 +727,4 @@ window.addEventListener('resize', () => {
 // INIT
 // ============================================================
 
-updateScroll();
 animate();
