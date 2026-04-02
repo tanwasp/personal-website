@@ -1,5 +1,5 @@
 /* ============================================================
-   TANISH'S UNIVERSE v3 — Physics Sim + Holographic HUD
+   TANISH'S UNIVERSE v4 — Multi-System Galaxy
    ============================================================ */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -7,7 +7,7 @@
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow: hidden; /* no scroll bar — scroll is captured for thrust */
+  overflow: hidden;
 }
 
 body {
@@ -97,6 +97,11 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
   text-align: right;
 }
 
+.hud-value--sm {
+  font-size: 0.7rem;
+  min-width: 0;
+}
+
 .hud-bar-wrap {
   height: 3px;
   background: rgba(0, 212, 255, 0.1);
@@ -122,7 +127,7 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
 }
 
 /* ============================================================
-   RETICLE (center crosshair)
+   RETICLE
    ============================================================ */
 
 #reticle {
@@ -226,33 +231,35 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
 }
 
 /* ============================================================
-   STAR MAP
+   GALAXY MAP (Star Map)
    ============================================================ */
 
 #starmap {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(3, 3, 8, 0.88);
+  background: rgba(3, 3, 8, 0.90);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
   transition: opacity 0.4s ease;
 }
 
 .starmap-inner {
-  max-width: 700px;
+  max-width: 900px;
   width: 100%;
   padding: 2rem;
+  padding-top: 3rem;
 }
 
 .starmap-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
 }
 
 .starmap-header h2 {
@@ -262,70 +269,158 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
   color: #fff;
 }
 
+.starmap-sub {
+  color: rgba(255,255,255,0.3);
+  margin-top: 0.3rem;
+}
+
 #starmap-close {
   font-size: 1.2rem;
   color: rgba(255,255,255,0.4);
   padding: 0.5rem;
   transition: color 0.2s;
 }
-
 #starmap-close:hover { color: #fff; }
-
-.starmap-sub {
-  color: rgba(255,255,255,0.3);
-  margin-bottom: 1.5rem;
-}
 
 .starmap-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
 }
 
-.starmap-item {
+/* System card */
+.starmap-system {
   background: rgba(0, 15, 30, 0.5);
   border: 1px solid rgba(0, 212, 255, 0.1);
-  border-radius: 10px;
-  padding: 1rem;
-  cursor: pointer;
+  border-radius: 12px;
+  padding: 1.25rem;
   transition: all 0.2s ease;
 }
 
-.starmap-item:hover {
-  border-color: rgba(0, 212, 255, 0.4);
-  background: rgba(0, 30, 60, 0.5);
-  transform: translateY(-2px);
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.1);
+.starmap-system:hover {
+  border-color: rgba(0, 212, 255, 0.3);
+  background: rgba(0, 20, 40, 0.6);
 }
 
-.starmap-item__dot {
-  width: 10px;
-  height: 10px;
+.starmap-system--current {
+  border-color: rgba(0, 212, 255, 0.3);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.06);
+}
+
+.starmap-system__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0.4rem;
+}
+
+.starmap-system__dot {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  display: inline-block;
-  margin-right: 6px;
-  box-shadow: 0 0 6px currentColor;
+  flex-shrink: 0;
 }
 
-.starmap-item__name {
+.starmap-system__name {
   font-family: 'Clash Display', sans-serif;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: #fff;
 }
 
-.starmap-item__desc {
+.starmap-system__here {
+  font-size: 0.5rem;
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.starmap-system__desc {
   font-size: 0.75rem;
   color: rgba(255,255,255,0.4);
-  margin-top: 0.3rem;
+  margin-bottom: 0.5rem;
   line-height: 1.4;
 }
 
-.starmap-item__dist {
-  font-family: 'JetBrains Mono', monospace;
+.starmap-system__info {
+  font-size: 0.55rem;
+  color: rgba(0, 212, 255, 0.4);
+  margin-bottom: 0.6rem;
+}
+
+/* Planets inside system card */
+.starmap-system__planets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.8rem;
+}
+
+.starmap-planet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.starmap-planet:hover {
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.starmap-planet__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.starmap-planet__name {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.7);
+  flex: 1;
+}
+
+.starmap-planet__dist {
+  font-size: 0.55rem;
+  color: rgba(0, 212, 255, 0.4);
+}
+
+/* Warp & tour buttons */
+.starmap-warp-btn,
+.starmap-tour-btn {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  text-align: center;
   font-size: 0.6rem;
-  color: rgba(0, 212, 255, 0.5);
-  margin-top: 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.starmap-warp-btn {
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  color: #a855f7;
+}
+.starmap-warp-btn:hover {
+  background: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.15);
+}
+
+.starmap-tour-btn {
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  color: #00d4ff;
+}
+.starmap-tour-btn:hover {
+  background: rgba(0, 212, 255, 0.2);
+  border-color: rgba(0, 212, 255, 0.4);
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.15);
 }
 
 .starmap-footer {
@@ -368,7 +463,6 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
   transform: translateY(-50%) translateX(0);
 }
 
-/* Left-side variant */
 .info-card.info-card--left {
   right: auto;
   left: 5vw;
@@ -406,19 +500,15 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
 .info-body .tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; margin-bottom: 0.6rem; }
 .info-body .tags span { font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; padding: 0.15rem 0.5rem; border-radius: 100px; background: rgba(0,212,255,0.08); color: #00d4ff; border: 1px solid rgba(0,212,255,0.12); }
 
-.info-body .project-link {
-  display: block;
-  padding: 0.7rem;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.03);
-  margin-bottom: 0.6rem;
-  transition: all 0.2s ease;
+.info-body .project-ext-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #a855f7;
+  font-size: 0.6rem;
+  transition: color 0.2s;
   pointer-events: auto;
 }
-.info-body .project-link:hover { border-color: rgba(168,85,247,0.4); background: rgba(168,85,247,0.06); transform: translateY(-1px); }
-.info-body .project-link h3 { margin-top: 0; }
-.info-body .project-link .mono { color: #a855f7; font-size: 0.55rem; }
+.info-body .project-ext-link:hover { color: #c084fc; }
 
 .info-body .about-item { margin-bottom: 0.4rem; }
 .info-body .about-item strong { color: rgba(255,255,255,0.8); }
@@ -499,6 +589,93 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
 .ap-cancel-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
 
 /* ============================================================
+   TOUR INDICATOR
+   ============================================================ */
+
+#tour-indicator {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 36;
+  background: rgba(0, 15, 30, 0.5);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 8px;
+  padding: 6px 16px;
+  color: #00d4ff;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.3s;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+}
+
+.tour-icon {
+  color: #22c55e;
+  font-size: 0.7rem;
+}
+
+/* ============================================================
+   WARP OVERLAY
+   ============================================================ */
+
+#warp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(3, 3, 8, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.4s ease;
+}
+
+.warp-inner {
+  text-align: center;
+  position: relative;
+}
+
+.warp-lines {
+  position: absolute;
+  inset: -200px;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 4px,
+    rgba(168, 85, 247, 0.04) 4px,
+    rgba(168, 85, 247, 0.04) 5px
+  );
+  animation: warp-scroll 0.15s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes warp-scroll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(5px); }
+}
+
+.warp-text {
+  font-size: 0.7rem;
+  color: rgba(168, 85, 247, 0.7);
+  letter-spacing: 0.2em;
+  margin-bottom: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.warp-dest {
+  font-family: 'Clash Display', sans-serif;
+  font-size: clamp(2rem, 1rem + 3vw, 4rem);
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 40px rgba(168, 85, 247, 0.4);
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================================
    FOOTER
    ============================================================ */
 
@@ -519,7 +696,6 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
   color: rgba(255,255,255,0.2);
   transition: color 0.2s;
 }
-
 .footer-link:hover { color: rgba(255,255,255,0.4); }
 
 /* ============================================================
@@ -557,16 +733,19 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
    ============================================================ */
 
 @media (max-width: 768px) {
-  .hud-panel--tl, .hud-panel--tr { padding: 8px 10px; min-width: 140px; }
+  .hud-panel--tl, .hud-panel--tr { padding: 8px 10px; min-width: 130px; }
   .hud-panel--tl { top: 10px; left: 10px; }
   .hud-panel--tr { top: 10px; right: 10px; }
   .hud-value { font-size: 0.7rem; min-width: 55px; }
+  .hud-value--sm { font-size: 0.6rem; min-width: 0; }
   .hud-label { font-size: 0.45rem; }
-  .hud-panel--bc { bottom: 70px; }
+  .hud-panel--bc { bottom: 70px; padding: 6px 12px; }
   .intro-name { font-size: clamp(2.2rem, 12vw, 4rem); }
   .info-card { right: 2vw; max-width: 92vw; }
   .info-card.info-card--left { left: 2vw; }
+  .starmap-grid { grid-template-columns: 1fr; }
   #footer { display: none; }
+  #tour-indicator { top: auto; bottom: 100px; font-size: 0.5rem; }
 }
 
 /* ============================================================

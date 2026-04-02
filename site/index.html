@@ -47,8 +47,12 @@
 
     <div class="hud-panel hud-panel--tr">
       <div class="hud-row">
+        <span class="hud-label">SYSTEM</span>
+        <span class="hud-value hud-value--sm" id="hud-system">The Journey</span>
+      </div>
+      <div class="hud-row">
         <span class="hud-label">NEAREST</span>
-        <span class="hud-value" id="hud-nearest">—</span>
+        <span class="hud-value hud-value--sm" id="hud-nearest">—</span>
       </div>
       <div class="hud-row">
         <span class="hud-label">DISTANCE</span>
@@ -61,7 +65,7 @@
     </div>
 
     <div class="hud-panel hud-panel--bc">
-      <span class="hud-hint" id="hud-hint">SCROLL to thrust · M for star map · click planets to autopilot</span>
+      <span class="hud-hint" id="hud-hint">SCROLL to thrust · ARROWS to steer · M for galaxy map</span>
     </div>
   </div>
 
@@ -76,19 +80,21 @@
     </svg>
   </div>
 
-  <!-- ===== STAR MAP OVERLAY ===== -->
+  <!-- ===== GALAXY MAP OVERLAY ===== -->
   <div id="starmap" class="hidden">
     <div class="starmap-inner">
       <div class="starmap-header">
-        <h2>Star Map</h2>
-        <button id="starmap-close" aria-label="Close star map">✕</button>
+        <div>
+          <h2>Galaxy Map</h2>
+          <p class="starmap-sub mono">Navigate between star systems — click planets for autopilot</p>
+        </div>
+        <button id="starmap-close" aria-label="Close galaxy map">✕</button>
       </div>
-      <p class="starmap-sub mono">Select a destination — click to autopilot</p>
       <div class="starmap-grid" id="starmap-grid">
         <!-- Populated by JS -->
       </div>
       <div class="starmap-footer mono">
-        <span>Press M or ESC to close</span>
+        <span>ARROWS steer · SCROLL thrust · SHIFT brake · M / ESC close</span>
       </div>
     </div>
   </div>
@@ -121,19 +127,34 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
       </a>
     </div>
-    <p class="intro-scroll mono">scroll to thrust · M for star map</p>
+    <p class="intro-scroll mono">scroll to thrust · arrows to steer · M for galaxy map</p>
   </div>
 
   <!-- ===== MAP BUTTON ===== -->
-  <button id="map-btn" class="map-btn mono" aria-label="Open star map">
+  <button id="map-btn" class="map-btn mono" aria-label="Open galaxy map">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-    MAP [M]
+    GALAXY MAP [M]
   </button>
 
   <!-- ===== AUTOPILOT INDICATOR ===== -->
   <div id="autopilot-indicator" class="hidden mono">
     ◈ AUTOPILOT — <span id="ap-dest"></span>
     <button id="ap-cancel" class="ap-cancel-btn">DISENGAGE</button>
+  </div>
+
+  <!-- ===== TOUR INDICATOR ===== -->
+  <div id="tour-indicator" class="hidden mono">
+    <span class="tour-icon">▶</span>
+    GUIDED TOUR <span id="tour-progress"></span>
+  </div>
+
+  <!-- ===== WARP OVERLAY ===== -->
+  <div id="warp-overlay" class="hidden">
+    <div class="warp-inner">
+      <div class="warp-lines"></div>
+      <p class="warp-text mono">⚡ WARPING TO</p>
+      <h2 class="warp-dest" id="warp-dest-name"></h2>
+    </div>
   </div>
 
   <!-- ===== FOOTER ===== -->
