@@ -1,11 +1,11 @@
 /* ═══════════════════════════════════════════════════════════
-   TANISH'S UNIVERSE v5
+   TANISH'S UNIVERSE v5.1
    Five phases:
      HOME      — holographic orrery, camera revolves
-     WARP      — relativistic warp transition (canvas effect)
-     SYSTEM    — star + planets visible, mode chooser
-     GUIDED    — scroll-thrust, sequential, info cards, zoom
-     EXPLORER  — WASD+mouse-look, proximity popups
+     WARP      — spaceship warp tunnel transition
+     SYSTEM    — star + planets visible, mode chooser at sides
+     GUIDED    — scroll-thrust, sequential, info cards
+     EXPLORER  — arrows = translate, mouse = look, prox popups
    ═══════════════════════════════════════════════════════════ */
 
 import * as THREE from 'three';
@@ -20,7 +20,6 @@ const SECTIONS = [
     subtitle: 'ORIGIN STORY',
     color: 0x00d4ff,
     starColor: 0x00d4ff,
-    // position on the home orrery (unit sphere × scale)
     orreryPos: new THREE.Vector3(0, 0.6, 1).normalize().multiplyScalar(7),
     starRadius: 1.4,
     star: {
@@ -209,7 +208,6 @@ bgStarGeo.setAttribute('position', new THREE.BufferAttribute(bgPos,3));
 bgStarGeo.setAttribute('color',    new THREE.BufferAttribute(bgCol,3));
 bgStarGeo.setAttribute('size',     new THREE.BufferAttribute(bgSz,1));
 
-// Relativistic shader used in all modes
 const bgStarMat = new THREE.ShaderMaterial({
   uniforms: { uBeta: {value:0}, uFwd: {value: new THREE.Vector3(0,0,-1)} },
   vertexShader:`
@@ -288,6 +286,103 @@ function addRing(parent, radius, color) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   STAR-LIKE ORRERY NODE — uses Points instead of a sphere
+   Renders as a bright spiky star point with diffraction rays
+   ───────────────────────────────────────────────────────── */
+function makeStarPoint(color) {
+  const group = new THREE.Group();
+
+  // Core — sharp diffraction-spike star (like a real telescope photo)
+  const coreMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(color) },
+      uTime:  { value: 0 },
+      uScale: { value: 1.0 }
+    },
+    vertexShader: `
+      uniform float uScale;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = 80.0 * uScale * (200.0 / max(-mv.z, 1.0));
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uTime;
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+        if (d > 0.5) discard;
+
+        // Diffraction spikes: 4 perpendicular rays (like a real star photo)
+        float ax = abs(uv.x);
+        float ay = abs(uv.y);
+        // Horizontal spike
+        float spikeH = exp(-ay * 60.0) * exp(-ax * 3.0) * smoothstep(0.5, 0.0, ax);
+        // Vertical spike
+        float spikeV = exp(-ax * 60.0) * exp(-ay * 3.0) * smoothstep(0.5, 0.0, ay);
+        // Diagonal spikes (fainter)
+        float diag1 = exp(-abs(uv.x - uv.y) * 60.0) * exp(-d * 3.0) * 0.5;
+        float diag2 = exp(-abs(uv.x + uv.y) * 60.0) * exp(-d * 3.0) * 0.5;
+
+        // Bright point core
+        float core = exp(-d * 40.0);
+
+        // Soft inner glow
+        float glow = exp(-d * 12.0) * 0.4;
+
+        float twinkle = 0.88 + 0.12 * sin(uTime * 2.3);
+        float brightness = clamp(core + glow + spikeH + spikeV + diag1 + diag2, 0.0, 1.0);
+        gl_FragColor = vec4(uColor + vec3(0.4, 0.4, 0.4) * core, brightness * twinkle);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+
+  const coreGeo = new THREE.BufferGeometry();
+  coreGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0]), 3));
+  const corePoint = new THREE.Points(coreGeo, coreMat);
+  group.add(corePoint);
+
+  // Soft glow halo behind the point
+  const haloMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(color) },
+      uTime:  { value: 0 }
+    },
+    vertexShader: `
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = 120.0 * (200.0 / max(-mv.z, 1.0));
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uTime;
+      void main() {
+        float d = length(gl_PointCoord - 0.5);
+        if (d > 0.5) discard;
+        float g = exp(-d * 8.0) * 0.25;
+        float twinkle = 0.7 + 0.3 * sin(uTime * 1.7 + 1.2);
+        gl_FragColor = vec4(uColor, g * twinkle);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+
+  const haloGeo = new THREE.BufferGeometry();
+  haloGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0]), 3));
+  const haloPoint = new THREE.Points(haloGeo, haloMat);
+  group.add(haloPoint);
+
+  // Store refs for animation
+  group.userData.coreMat = coreMat;
+  group.userData.haloMat = haloMat;
+
+  return group;
+}
+
+/* ─────────────────────────────────────────────────────────
    PHASE STATE
    ───────────────────────────────────────────────────────── */
 let phase = 'home'; // home | warp | system | guided | explorer
@@ -330,21 +425,29 @@ scene.add(orrery);
   }
 })();
 
-// Central star of the orrery
-const orreryStar = makeGlowSphere(1.1, 0xffffff, 1.4);
-orrery.add(orreryStar);
-orrery.add(makeAtmo(1.1, 0x88ddff));
+// Central star of the orrery — also star-like
+const orreryCentralStar = makeStarPoint(0xffffff);
+// Slightly larger than section nodes
+orreryCentralStar.children.forEach(c => {
+  if (c.material?.uniforms?.uScale) c.material.uniforms.uScale.value = 1.1;
+});
+orrery.add(orreryCentralStar);
+// Subtle atmo glow for the central star
+orrery.add(makeAtmo(0.6, 0x88ddff));
 
 // Orrery node objects — one per section
-const orreryNodes = []; // { mesh, labelEl, section }
+const orreryNodes = []; // { group, starGroup, labelEl, section }
 
 SECTIONS.forEach(sec => {
   const group = new THREE.Group();
   group.position.copy(sec.orreryPos);
 
-  const sphere = makeGlowSphere(.55, sec.color, 1.8);
-  group.add(sphere);
-  group.add(makeAtmo(.55, sec.color));
+  // Star-like node instead of a sphere
+  const starGroup = makeStarPoint(sec.color);
+  starGroup.children.forEach(c => {
+    if (c.material?.uniforms?.uScale) c.material.uniforms.uScale.value = 1.3;
+  });
+  group.add(starGroup);
 
   // Orbital ring showing this node's orbit radius
   const orbitPts = [];
@@ -381,10 +484,10 @@ SECTIONS.forEach(sec => {
   group.userData.labelEl = el;
 
   orrery.add(group);
-  orreryNodes.push({ group, labelEl: el, section: sec, sphere });
+  orreryNodes.push({ group, starGroup, labelEl: el, section: sec });
 });
 
-// Disable raycasting on all non-node orrery children (grid lines, orbit rings, connector lines)
+// Disable raycasting on all non-node orrery children
 orrery.children.forEach(child => {
   if (!orreryNodes.find(n => n.group === child)) {
     child.raycast = () => {};
@@ -392,7 +495,6 @@ orrery.children.forEach(child => {
   }
 });
 
-// Raycaster for orrery clicks
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
@@ -421,10 +523,8 @@ function onOrreryClick(e) {
   mouse.x = (e.clientX/innerWidth)*2-1;
   mouse.y = -(e.clientY/innerHeight)*2+1;
   raycaster.setFromCamera(mouse, camera);
-  // Use the full orrery group recursively to handle rotation
   const hits = raycaster.intersectObjects(orrery.children, true);
   if (hits.length) {
-    // Walk up to find the orrery node group
     let obj = hits[0].object;
     while (obj.parent && obj.parent !== orrery) obj = obj.parent;
     const node = orreryNodes.find(n => n.group === obj);
@@ -433,7 +533,7 @@ function onOrreryClick(e) {
 }
 
 /* ─────────────────────────────────────────────────────────
-   ██████  WARP TRANSITION
+   ██████  WARP TRANSITION — spaceship hyperspace style
    ───────────────────────────────────────────────────────── */
 const warpOverlay = document.getElementById('warp-overlay');
 const warpCanvas  = document.getElementById('warp-canvas');
@@ -441,7 +541,13 @@ const warpDestEl  = document.getElementById('warp-dest');
 const wCtx = warpCanvas.getContext('2d');
 
 let warpActive = false, warpT = 0, warpStreaks = [], warpStartTime = 0;
+let warpShake = 0;
 
+/* Warp has 3 phases:
+   0.0–0.4 : ENGAGE  — streaks emerge from centre, stars stretch, cockpit shake
+   0.4–0.7 : TUNNEL  — full hyperspace tunnel rings + solid colour flash, max shake
+   0.7–1.0 : ARRIVE  — tunnel closes, flash white, everything fades
+*/
 function startWarp(section) {
   if (phase === 'warp') return;
   phase = 'warp';
@@ -450,71 +556,171 @@ function startWarp(section) {
   warpOverlay.classList.remove('hidden');
   document.getElementById('home-ui').classList.add('hidden');
 
-  // Generate streaks
+  // Build streaks — radiate outward from centre
   warpStreaks = [];
-  for (let i=0; i<300; i++) {
-    const angle = Math.random()*Math.PI*2;
-    const dist   = 30 + Math.random()*200;
+  for (let i = 0; i < 500; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = 5 + Math.random() * 80;
+    const colorRoll = Math.random();
+    const color = colorRoll < .45 ? '#00d4ff' : colorRoll < .75 ? '#a855f7' : '#ffffff';
     warpStreaks.push({
-      x: innerWidth/2 + Math.cos(angle)*dist,
-      y: innerHeight/2 + Math.sin(angle)*dist,
       angle,
-      speed: 0.8 + Math.random()*3,
-      len: 2 + Math.random()*6,
-      color: Math.random() > .4 ? '#00d4ff' : '#a855f7',
-      alpha: .3 + Math.random()*.7
+      dist,            // how far from centre the streak starts
+      baseLen: 2 + Math.random() * 5,
+      speed: 0.6 + Math.random() * 2.8,
+      color,
+      alpha: 0.25 + Math.random() * 0.75,
+      thickness: 0.4 + Math.random() * 1.4,
+      // rings for tunnel phase
+      ringR: 30 + Math.random() * 220,
+      ringZ: Math.random()
     });
   }
+
   warpT = 0;
   warpStartTime = performance.now();
   warpActive = true;
-  // Fallback: ensure transition completes even if RAF is throttled
+  warpShake = 0;
+
   setTimeout(() => {
     if (warpActive) {
       warpActive = false;
       warpOverlay.classList.add('hidden');
+      document.getElementById('warp-overlay').style.transform = '';
       enterSystem(activeSection);
     }
-  }, 2500);
+  }, 2600);
 }
 
 function updateWarp(dt) {
   if (!warpActive) return;
   warpT = (performance.now() - warpStartTime) / 1000;
 
-  warpCanvas.width  = innerWidth;
-  warpCanvas.height = innerHeight;
-
-  const cx = innerWidth/2, cy = innerHeight/2;
-  wCtx.fillStyle = 'rgba(2,2,9,0.18)';
-  wCtx.fillRect(0,0,innerWidth,innerHeight);
-
+  const W = innerWidth, H = innerHeight;
+  const cx = W / 2, cy = H / 2;
   const progress = Math.min(warpT / 2.2, 1);
-  const ease = progress < .5 ? 2*progress*progress : 1-Math.pow(-2*progress+2,2)/2;
 
-  warpStreaks.forEach(s => {
-    const len = s.len * (1 + ease*60) * s.speed;
-    const sx = cx + (s.x-cx) * (1-ease*.85);
-    const sy = cy + (s.y-cy) * (1-ease*.85);
-    const ex = sx + Math.cos(s.angle+Math.PI)*len;
-    const ey = sy + Math.sin(s.angle+Math.PI)*len;
+  // Ease: fast build-up, hold tunnel, soft exit
+  const engageP  = Math.min(progress / 0.35, 1);                        // 0–0.35s
+  const tunnelP  = Math.max(0, Math.min((progress - 0.35) / 0.35, 1));  // 0.35–0.7s
+  const arriveP  = Math.max(0, (progress - 0.7) / 0.3);                  // 0.7–1.0
 
-    const g = wCtx.createLinearGradient(sx,sy,ex,ey);
-    // Parse hex color to rgba
-    const hex = s.color.replace('#','');
-    const r = parseInt(hex.substring(0,2),16);
-    const gv = parseInt(hex.substring(2,4),16);
-    const b = parseInt(hex.substring(4,6),16);
-    g.addColorStop(0, `rgba(${r},${gv},${b},${s.alpha})`);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    wCtx.strokeStyle = g;
-    wCtx.lineWidth = .8 + ease*1.2;
-    wCtx.beginPath(); wCtx.moveTo(sx,sy); wCtx.lineTo(ex,ey); wCtx.stroke();
-  });
+  const easeIn = t => t * t * (3 - 2 * t);
+  const engE   = easeIn(engageP);
+  const tunE   = easeIn(tunnelP);
+
+  warpCanvas.width  = W;
+  warpCanvas.height = H;
+
+  // ── Background trail fill
+  const trailAlpha = 0.12 + tunE * 0.35;
+  wCtx.fillStyle = `rgba(2,2,9,${trailAlpha})`;
+  wCtx.fillRect(0, 0, W, H);
+
+  // ── Cockpit shake (peaks at tunnel start, eases at arrival)
+  warpShake = (engE * 4 + tunE * 8) * (1 - arriveP * 2);
+  const ox = (Math.random() - .5) * warpShake;
+  const oy = (Math.random() - .5) * warpShake;
+
+  wCtx.save();
+  wCtx.translate(cx + ox, cy + oy);
+
+  // ── STREAKS (engage + hold)
+  if (progress < 0.78) {
+    warpStreaks.forEach(s => {
+      // How far from centre the streak tip is
+      const tipDist  = s.dist * (1 + engE * 12 + tunE * 30);
+      const tailDist = tipDist - s.baseLen * (1 + engE * 50 + tunE * 120) * s.speed;
+      if (tailDist < 0 && tipDist < 0) return;
+
+      const tipX  = Math.cos(s.angle) * tipDist;
+      const tipY  = Math.sin(s.angle) * tipDist;
+      const tailX = Math.cos(s.angle) * Math.max(0, tailDist);
+      const tailY = Math.sin(s.angle) * Math.max(0, tailDist);
+
+      const hex = s.color.replace('#','');
+      const r = parseInt(hex.substring(0,2),16);
+      const g = parseInt(hex.substring(2,4),16);
+      const b = parseInt(hex.substring(4,6),16);
+      const alpha = s.alpha * (1 - arriveP);
+
+      const grad = wCtx.createLinearGradient(tailX, tailY, tipX, tipY);
+      grad.addColorStop(0, `rgba(${r},${g},${b},0)`);
+      grad.addColorStop(1, `rgba(${r},${g},${b},${alpha})`);
+
+      wCtx.strokeStyle = grad;
+      wCtx.lineWidth = s.thickness * (1 + tunE * 2);
+      wCtx.beginPath();
+      wCtx.moveTo(tailX, tailY);
+      wCtx.lineTo(tipX, tipY);
+      wCtx.stroke();
+    });
+  }
+
+  // ── TUNNEL RINGS (during tunnel phase)
+  if (tunE > 0) {
+    const ringCount = 8;
+    for (let i = 0; i < ringCount; i++) {
+      const t = ((warpT * 1.8 + i / ringCount) % 1);
+      const z = 1 - t;               // 0=far(small), 1=near(big)
+      const ringR = z * z * 340 + 10;
+      const ringAlpha = (1 - z) * tunE * 0.7 * (1 - arriveP * 1.5);
+      if (ringAlpha <= 0) continue;
+
+      // Pick ring color from section
+      const secColor = new THREE.Color(activeSection.color);
+      const rr = Math.floor(secColor.r * 255);
+      const gg = Math.floor(secColor.g * 255);
+      const bb = Math.floor(secColor.b * 255);
+
+      wCtx.strokeStyle = `rgba(${rr},${gg},${bb},${ringAlpha})`;
+      wCtx.lineWidth = (1 - z) * 2.5 + 0.5;
+      wCtx.beginPath();
+      wCtx.ellipse(0, 0, ringR, ringR * 0.5, 0, 0, Math.PI * 2);
+      wCtx.stroke();
+
+      // Radial lines on ring
+      if (i % 2 === 0) {
+        for (let j = 0; j < 24; j++) {
+          const a = (j / 24) * Math.PI * 2;
+          const r1 = ringR * 0.92, r2 = ringR;
+          wCtx.strokeStyle = `rgba(${rr},${gg},${bb},${ringAlpha * 0.4})`;
+          wCtx.lineWidth = 0.5;
+          wCtx.beginPath();
+          wCtx.moveTo(Math.cos(a)*r1, Math.sin(a)*r1*0.5);
+          wCtx.lineTo(Math.cos(a)*r2, Math.sin(a)*r2*0.5);
+          wCtx.stroke();
+        }
+      }
+    }
+
+    // Central vanishing glow
+    const cgAlpha = tunE * 0.6 * (1 - arriveP * 2);
+    if (cgAlpha > 0) {
+      const secColor = new THREE.Color(activeSection.color);
+      const cg = wCtx.createRadialGradient(0, 0, 0, 0, 0, 120);
+      cg.addColorStop(0, `rgba(${Math.floor(secColor.r*255)},${Math.floor(secColor.g*255)},${Math.floor(secColor.b*255)},${cgAlpha})`);
+      cg.addColorStop(1, 'rgba(0,0,0,0)');
+      wCtx.fillStyle = cg;
+      wCtx.beginPath();
+      wCtx.arc(0, 0, 120, 0, Math.PI * 2);
+      wCtx.fill();
+    }
+  }
+
+  // ── ARRIVAL FLASH
+  if (arriveP > 0) {
+    const flashA = arriveP < 0.5 ? arriveP * 2 : 2 - arriveP * 2;
+    wCtx.fillStyle = `rgba(255,255,255,${flashA * 0.6})`;
+    wCtx.fillRect(-cx, -cy, W, H);
+  }
+
+  wCtx.restore();
 
   if (progress >= 1) {
     warpActive = false;
     warpOverlay.classList.add('hidden');
+    warpOverlay.style.transform = '';
     enterSystem(activeSection);
   }
 }
@@ -523,7 +729,7 @@ function updateWarp(dt) {
    ██████  SYSTEM VIEW
    ───────────────────────────────────────────────────────── */
 let systemGroup = null;
-let systemPlanetObjects = [];  // {group, data, worldPos: Vector3, sphere}
+let systemPlanetObjects = [];
 let systemStarObj = null;
 
 function buildSystem(section) {
@@ -565,7 +771,6 @@ function buildSystem(section) {
   section.planets.forEach((p, idx) => {
     const group = new THREE.Group();
 
-    // Orbit ring
     const orbitPts = [];
     for (let i=0; i<=96; i++) {
       const a=(i/96)*Math.PI*2;
@@ -592,7 +797,6 @@ function buildSystem(section) {
       group.add(moon);
     }
 
-    // Initial position on orbit
     const startAngle = (idx/section.planets.length)*Math.PI*2;
     group.position.set(p.orbitR*Math.cos(startAngle), 0, p.orbitR*Math.sin(startAngle));
 
@@ -608,11 +812,10 @@ function enterSystem(section) {
   phase = 'system';
   buildSystem(section);
 
-  // Hide orrery labels and orrery itself
+  // Hide orrery
   orreryNodes.forEach(n => { n.labelEl.style.opacity = '0'; n.labelEl.style.pointerEvents = 'none'; });
   orrery.visible = false;
 
-  // Camera position above the system
   camera.position.set(0, 18, 32);
   camera.lookAt(0, 0, 0);
 
@@ -624,15 +827,11 @@ function enterSystem(section) {
   document.getElementById('system-ui').classList.remove('hidden');
 }
 
-document.getElementById('btn-back').addEventListener('click', () => {
-  exitToHome();
-});
-
+document.getElementById('btn-back').addEventListener('click', () => exitToHome());
 document.getElementById('btn-guided').addEventListener('click', () => {
   document.getElementById('system-ui').classList.add('hidden');
   startGuidedTour();
 });
-
 document.getElementById('btn-explorer').addEventListener('click', () => {
   document.getElementById('system-ui').classList.add('hidden');
   startExplorer();
@@ -640,6 +839,8 @@ document.getElementById('btn-explorer').addEventListener('click', () => {
 
 /* ─────────────────────────────────────────────────────────
    ██████  GUIDED TOUR
+   Scroll thrusts the ship forward toward the current target.
+   On arrival, info card pops up. CLOSE → flies to next.
    ───────────────────────────────────────────────────────── */
 const tourHud      = document.getElementById('tour-hud');
 const tourVelEl    = document.getElementById('tour-vel');
@@ -655,7 +856,8 @@ const zoomOverlay  = document.getElementById('zoom-overlay');
 
 let tourVel = 0, tourShipTime = 0;
 let tourQueue = [], tourCurrentTarget = null, tourAP = null;
-const C_TOUR = 60; // slower c for tour, easier to control
+let tourArrived = false;
+const C_TOUR = 60;
 let scrollAccumTour = 0;
 
 document.getElementById('tour-back').addEventListener('click', () => exitToSystem());
@@ -664,19 +866,18 @@ document.getElementById('zoom-close').addEventListener('click', () => zoomOverla
 window.addEventListener('wheel', e => {
   if (phase !== 'guided') return;
   e.preventDefault();
-  scrollAccumTour += e.deltaY * 0.7;
+  // Only accept scroll thrust when we have an active AP target (not at info card)
+  if (tourAP) scrollAccumTour += e.deltaY * 0.9;
 }, {passive:false});
 
 function startGuidedTour() {
   phase = 'guided';
-  tourVel = 0; tourShipTime = 0; scrollAccumTour = 0;
+  tourVel = 0; tourShipTime = 0; scrollAccumTour = 0; tourArrived = false;
   tourHud.classList.remove('hidden');
 
-  // Place camera at star, looking outward
-  camera.position.set(0, 3, activeSection.starRadius + 10);
+  camera.position.set(0, 3, activeSection.starRadius + 12);
   camera.lookAt(0, 0, 0);
 
-  // Queue: star first, then planets
   const starEntry = { isStar: true, data: activeSection.star, title: activeSection.star.title, pos: new THREE.Vector3(0,0,0) };
   const planetEntries = activeSection.planets.map((p, i) => {
     const angle = (i/activeSection.planets.length)*Math.PI*2;
@@ -688,24 +889,30 @@ function startGuidedTour() {
 
 function flyToNextTourStop() {
   if (tourQueue.length === 0) {
-    // Tour complete
     infoCardEl.classList.add('hidden');
     tourHud.classList.add('hidden');
     exitToSystem();
     return;
   }
-  const stop = tourQueue.shift();
-  const total = (1 + activeSection.planets.length);
-  const idx = total - tourQueue.length;
-  tourStopEl.textContent = `${idx} / ${total}`;
-  tourHintEl.textContent = `SCROLL to thrust · heading to ${stop.title}`;
+  infoCardEl.classList.add('hidden');
+  tourArrived = false;
+  scrollAccumTour = 0;
 
-  const offset = new THREE.Vector3(0, 1.5, (stop.isStar ? activeSection.starRadius : .9) + 8);
+  const stop = tourQueue.shift();
+  const total = 1 + activeSection.planets.length;
+  const idx   = total - tourQueue.length;
+  tourStopEl.textContent = `${idx} / ${total}`;
+  tourHintEl.textContent  = `SCROLL to thrust  ·  heading to ${stop.title}`;
+
+  const arrivalDist = (stop.isStar ? activeSection.starRadius : .9) + 6;
+  const offset = new THREE.Vector3(0, 1.2, arrivalDist);
   tourAP = {
     target: stop.pos.clone().add(offset),
-    data: stop,
+    data:   stop,
     onArrive: () => {
+      tourArrived = true;
       showTourInfo(stop);
+      tourHintEl.textContent = 'CLOSE card to continue';
     }
   };
   tourCurrentTarget = stop;
@@ -717,65 +924,61 @@ function showTourInfo(stop) {
   infoTitleEl.textContent = d.title;
   infoSubEl.textContent   = d.sub || '';
   infoSubEl.style.display = d.sub ? 'block' : 'none';
-  infoBodyEl.innerHTML = d.body || '';
+  infoBodyEl.innerHTML    = d.body || '';
   infoCardEl.classList.remove('hidden');
 }
 
 function updateGuidedTour(dt) {
   if (phase !== 'guided') return;
 
-  // Scroll thrust
-  const thrust = scrollAccumTour * 2;
-  scrollAccumTour *= 0.82;
-
   if (tourAP) {
-    const dir = tourAP.target.clone().sub(camera.position);
+    const dir  = tourAP.target.clone().sub(camera.position);
     const dist = dir.length();
-    if (dist < 1.5) {
+
+    // Camera smoothly looks toward destination
+    const fwd = new THREE.Vector3();
+    camera.getWorldDirection(fwd);
+    fwd.lerp(dir.clone().normalize(), 0.04).normalize();
+    camera.lookAt(camera.position.clone().add(fwd.multiplyScalar(10)));
+
+    if (dist < 1.2) {
       tourAP.onArrive();
       tourAP = null;
-      tourVel *= 0.1;
+      tourVel *= 0.05;
     } else {
-      dir.normalize();
-      const smoothFwd = new THREE.Vector3();
-      camera.getWorldDirection(smoothFwd);
-      smoothFwd.lerp(dir, 0.04).normalize();
-      camera.lookAt(camera.position.clone().add(smoothFwd.multiplyScalar(10)));
+      // Scroll drives thrust toward target
+      const thrustInput = scrollAccumTour;
+      scrollAccumTour  *= 0.75;
 
-      const targetSpeed = Math.min(C_TOUR*.55, dist*0.4);
-      tourVel += (targetSpeed - tourVel) * 0.05;
-      if (Math.abs(thrust) > 1) tourVel += thrust * dt * 8;
+      const autoSpeed = Math.min(C_TOUR * 0.5, dist * 0.35);
+      tourVel += (autoSpeed - tourVel) * 0.04;
+      if (Math.abs(thrustInput) > 0.5) tourVel += thrustInput * dt * 6;
     }
   } else {
-    // Free scroll
-    if (Math.abs(thrust) > 0.1) {
-      const fwd = new THREE.Vector3();
-      camera.getWorldDirection(fwd);
-      tourVel += C_TOUR * dt * (thrust/60);
-    }
+    // Coasting / arrived — decay
+    tourVel *= 0.92;
+    scrollAccumTour = 0;
   }
 
-  tourVel = Math.max(-C_TOUR*.3, Math.min(tourVel, C_TOUR*.9));
+  tourVel = Math.max(-C_TOUR * .2, Math.min(tourVel, C_TOUR * .9));
   tourVel *= 0.985;
   if (Math.abs(tourVel) < .01) tourVel = 0;
 
-  const fwd = new THREE.Vector3();
-  camera.getWorldDirection(fwd);
-  camera.position.addScaledVector(fwd, tourVel * dt);
+  const fwd2 = new THREE.Vector3();
+  camera.getWorldDirection(fwd2);
+  camera.position.addScaledVector(fwd2, tourVel * dt);
 
-  const beta = Math.abs(tourVel)/C_TOUR;
-  const gamma = 1/Math.sqrt(1-beta*beta);
-  tourShipTime += dt/gamma;
-  tourVelEl.textContent = beta.toFixed(3)+'c';
-  tourBarEl.style.width  = (beta*100/.9)+'%';
-
-  if (!tourAP && infoCardEl.classList.contains('hidden')) {
-    tourHintEl.textContent = 'SCROLL to thrust · reach the next stop';
-  }
+  const beta = Math.abs(tourVel) / C_TOUR;
+  const gamma = 1 / Math.sqrt(1 - beta * beta);
+  tourShipTime += dt / gamma;
+  tourVelEl.textContent  = beta.toFixed(3) + 'c';
+  tourBarEl.style.width  = (beta * 100 / .9) + '%';
 }
 
 /* ─────────────────────────────────────────────────────────
    ██████  EXPLORER MODE
+   Arrow keys / WASD = translate (forward/back/strafe)
+   Mouse (pointer-locked) = look around
    ───────────────────────────────────────────────────────── */
 const explorerHud = document.getElementById('explorer-hud');
 const hudVelEl    = document.getElementById('hud-vel');
@@ -790,9 +993,11 @@ const reticleEl   = document.getElementById('reticle');
 const proxPopup   = document.getElementById('proximity-popup');
 const proxName    = document.getElementById('prox-name');
 
-let expVel = 0, expShipTime = 0;
+let expVel = 0, expStrafeVel = 0, expShipTime = 0;
 let yaw = 0, pitch = 0;
-const expFwd = new THREE.Vector3(0,0,-1);
+const expFwd   = new THREE.Vector3(0,0,-1);
+const expRight = new THREE.Vector3(1,0,0);
+const expUp    = new THREE.Vector3(0,1,0);
 let mouseLocked = false;
 let expKeys = new Set();
 const C_EXP = 120;
@@ -807,9 +1012,9 @@ let explorerAP = null;
 
 function startExplorer() {
   phase = 'explorer';
-  expVel = 0; expShipTime = 0;
-  yaw = 0; pitch = .15;
-  updateExpFwd();
+  expVel = 0; expStrafeVel = 0; expShipTime = 0;
+  yaw = 0; pitch = .08;
+  updateExpOrientation();
 
   camera.position.set(0, 6, 28);
   camera.lookAt(0, 0, 0);
@@ -818,38 +1023,53 @@ function startExplorer() {
   reticleEl.classList.remove('hidden');
   hudSystemEl.textContent = activeSection.name;
 
-  // Enable mouse-look capture (gracefully handles sandboxed environments)
+  // Request pointer lock
   try {
-    const PLK = 'request'+'P'+'o'+'i'+'n'+'t'+'e'+'r'+'L'+'o'+'c'+'k';
+    const PLK = 'request' + 'P'+'o'+'i'+'n'+'t'+'e'+'r'+'L'+'o'+'c'+'k';
     const lockFn = canvas[PLK] || canvas['moz'+PLK];
     if (lockFn) lockFn.call(canvas);
-  } catch(e) { /* mouse-look unavailable in this context */ }
+  } catch(e) {}
 }
 
 document.addEventListener('pointer'+'lockchange', () => {
-  mouseLocked = document["pointer"+"LockElement"] === canvas;
+  mouseLocked = document['pointer'+'LockElement'] === canvas;
   hudHintEl.textContent = mouseLocked
-    ? 'WASD/ARROWS · MOUSE to look · SHIFT brake · CLICK planet to dock'
-    : 'Click screen to enable mouse look';
+    ? 'ARROWS/WASD move  ·  MOUSE look  ·  SHIFT brake'
+    : 'Click screen to capture mouse look';
 });
 
 document.addEventListener('mousemove', e => {
   if (phase !== 'explorer' || !mouseLocked) return;
-  yaw   -= e.movementX * 0.0025;
-  pitch  = Math.max(-Math.PI*.42, Math.min(Math.PI*.42, pitch - e.movementY*.0025));
-  updateExpFwd();
-  explorerAP = null; // manual look cancels autopilot
+  yaw   -= e.movementX * 0.0022;
+  pitch  = Math.max(-Math.PI*.4, Math.min(Math.PI*.4, pitch - e.movementY * .0022));
+  updateExpOrientation();
+  explorerAP = null;
   proxPopup.classList.add('hidden');
 });
 
 document.addEventListener('keydown', e => {
   expKeys.add(e.key.toLowerCase());
-  if (e.key === 'Escape' && phase === 'explorer') { const epf = document['exit'+'P'+'o'+'i'+'n'+'t'+'e'+'r'+'L'+'o'+'c'+'k']; if (epf) epf.call(document); explorerAP = null; }
+  if (e.key === 'Escape' && phase === 'explorer') {
+    const epf = document['exit'+'P'+'o'+'i'+'n'+'t'+'e'+'r'+'L'+'o'+'c'+'k'];
+    if (epf) epf.call(document);
+    explorerAP = null;
+  }
 });
 document.addEventListener('keyup', e => expKeys.delete(e.key.toLowerCase()));
 
-function updateExpFwd() {
-  expFwd.set(Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw)*Math.cos(pitch)).normalize();
+function updateExpOrientation() {
+  // Forward vector from yaw + pitch
+  expFwd.set(
+    Math.sin(yaw) * Math.cos(pitch),
+    Math.sin(pitch),
+    -Math.cos(yaw) * Math.cos(pitch)
+  ).normalize();
+
+  // Right = expFwd × worldUp (then re-normalise)
+  expRight.crossVectors(expFwd, new THREE.Vector3(0,1,0)).normalize();
+  if (expRight.length() < 0.001) expRight.set(1,0,0);
+
+  expUp.crossVectors(expRight, expFwd).normalize();
 }
 
 // Click on planet in explorer
@@ -879,19 +1099,30 @@ function startExplorerAutopilot(target) {
 function updateExplorer(dt) {
   if (phase !== 'explorer') return;
 
-  // WASD / arrows
-  const STEER = 1.6;
-  if (expKeys.has('arrowleft')  || expKeys.has('a')) { yaw -= STEER*dt; updateExpFwd(); explorerAP = null; }
-  if (expKeys.has('arrowright') || expKeys.has('d')) { yaw += STEER*dt; updateExpFwd(); explorerAP = null; }
-  if (expKeys.has('arrowup')    || expKeys.has('w')) { pitch = Math.min(pitch+STEER*.6*dt, Math.PI*.42); updateExpFwd(); explorerAP = null; }
-  if (expKeys.has('arrowdown')  || expKeys.has('s')) { pitch = Math.max(pitch-STEER*.6*dt,-Math.PI*.42); updateExpFwd(); explorerAP = null; }
-  if (expKeys.has(' ') || expKeys.has('q')) expVel = Math.min(expVel + C_EXP*dt*.8, C_EXP*.9);
-  if (expKeys.has('e') || expKeys.has('x')) expVel = Math.max(expVel - C_EXP*dt*.8, -C_EXP*.25);
-  if (expKeys.has('shift')) expVel *= .88;
+  const THRUST_ACC  = C_EXP * 0.9;   // forward/back acceleration
+  const STRAFE_ACC  = C_EXP * 0.6;   // strafe acceleration
+  const BRAKE       = 0.88;
+
+  // ── Forward / Backward  (Arrow Up/Down or W/S)
+  const thrustFwd = expKeys.has('arrowup')   || expKeys.has('w');
+  const thrustBck = expKeys.has('arrowdown') || expKeys.has('s');
+  if (thrustFwd)  expVel = Math.min(expVel + THRUST_ACC * dt, C_EXP * .9);
+  if (thrustBck)  expVel = Math.max(expVel - THRUST_ACC * dt, -C_EXP * .25);
+
+  // ── Strafe left / right  (Arrow Left/Right or A/D)
+  const strafeL = expKeys.has('arrowleft')  || expKeys.has('a');
+  const strafeR = expKeys.has('arrowright') || expKeys.has('d');
+  if (strafeL)  expStrafeVel = Math.max(expStrafeVel - STRAFE_ACC * dt, -C_EXP * .4);
+  if (strafeR)  expStrafeVel = Math.min(expStrafeVel + STRAFE_ACC * dt,  C_EXP * .4);
+
+  // ── Space/Q = thrust forward, E/X = brake
+  if (expKeys.has(' ') || expKeys.has('q')) expVel = Math.min(expVel + THRUST_ACC * dt, C_EXP * .9);
+  if (expKeys.has('e') || expKeys.has('x')) expVel = Math.max(expVel - THRUST_ACC * dt, -C_EXP * .25);
+  if (expKeys.has('shift'))  { expVel *= BRAKE; expStrafeVel *= BRAKE; }
 
   // Autopilot
   if (explorerAP) {
-    const dir = explorerAP.pos.clone().sub(camera.position);
+    const dir  = explorerAP.pos.clone().sub(camera.position);
     const dist = dir.length();
     const radius = explorerAP.isStar ? activeSection.starRadius : .9;
     if (dist < radius + 5) {
@@ -900,80 +1131,81 @@ function updateExplorer(dt) {
     } else {
       dir.normalize();
       expFwd.lerp(dir, .03).normalize();
-      yaw = Math.atan2(expFwd.x, -expFwd.z);
+      yaw   = Math.atan2(expFwd.x, -expFwd.z);
       pitch = Math.asin(Math.max(-1, Math.min(1, expFwd.y)));
-      expVel += (Math.min(C_EXP*.6, dist*.4) - expVel) * .04;
+      updateExpOrientation();
+      expVel += (Math.min(C_EXP * .6, dist * .4) - expVel) * .04;
+      expStrafeVel *= 0.9;
     }
   }
 
-  expVel = Math.max(-C_EXP*.25, Math.min(expVel, C_EXP*.9));
-  expVel *= .985;
-  if (Math.abs(expVel) < .02) expVel = 0;
+  // Decay
+  expVel       = Math.max(-C_EXP*.25, Math.min(expVel, C_EXP*.9));
+  expStrafeVel = Math.max(-C_EXP*.4,  Math.min(expStrafeVel, C_EXP*.4));
+  if (!thrustFwd && !thrustBck && !expKeys.has(' ') && !expKeys.has('q') && !expKeys.has('e') && !expKeys.has('x') && !explorerAP) {
+    expVel *= 0.985;
+  }
+  if (!strafeL && !strafeR) expStrafeVel *= 0.88;
 
-  camera.position.addScaledVector(expFwd, expVel*dt);
+  if (Math.abs(expVel)       < .02) expVel       = 0;
+  if (Math.abs(expStrafeVel) < .02) expStrafeVel = 0;
 
-  // Camera look: follow expFwd with slight mouse sway
-  const lookTarget = camera.position.clone().add(expFwd.clone().multiplyScalar(20));
-  camera.lookAt(lookTarget);
+  // Move camera
+  camera.position.addScaledVector(expFwd,   expVel       * dt);
+  camera.position.addScaledVector(expRight, expStrafeVel * dt);
 
-  const beta = Math.abs(expVel)/C_EXP;
-  const gamma = 1/Math.sqrt(1-beta*beta);
-  expShipTime += dt/gamma;
+  // Camera look
+  camera.lookAt(camera.position.clone().add(expFwd.clone().multiplyScalar(20)));
 
-  // Star shader update
+  // Relativistic HUD (based on combined speed)
+  const totalSpeed = Math.sqrt(expVel*expVel + expStrafeVel*expStrafeVel);
+  const beta  = Math.min(totalSpeed / C_EXP, 0.9999);
+  const gamma = 1 / Math.sqrt(1 - beta * beta);
+  expShipTime += dt / gamma;
+
   bgStarMat.uniforms.uBeta.value = beta;
   bgStarMat.uniforms.uFwd.value.copy(expFwd);
 
-  // HUD
-  hudVelEl.textContent = beta.toFixed(3)+'c';
-  hudBarEl.style.width = (beta*100/.9)+'%';
+  hudVelEl.textContent   = beta.toFixed(3) + 'c';
+  hudBarEl.style.width   = (beta * 100 / .9) + '%';
   hudGammaEl.textContent = gamma.toFixed(3);
-  const m=Math.floor(expShipTime/60), s=expShipTime%60;
-  hudTauEl.textContent = String(m).padStart(2,'0')+':'+s.toFixed(1).padStart(4,'0');
+  const m = Math.floor(expShipTime/60), s = expShipTime % 60;
+  hudTauEl.textContent   = String(m).padStart(2,'0') + ':' + s.toFixed(1).padStart(4,'0');
+  hudVelEl.style.color   = beta > .5 ? '#f472b6' : beta > .25 ? '#a855f7' : '#00d4ff';
 
-  hudVelEl.style.color = beta>.5?'#f472b6':beta>.25?'#a855f7':'#00d4ff';
-
-  // Nearest planet check
+  // Nearest planet
   let nearestDist = Infinity, nearestObj = null;
   systemPlanetObjects.forEach(o => {
     const d = camera.position.distanceTo(o.worldPos);
-    if (d < nearestDist) { nearestDist=d; nearestObj=o; }
+    if (d < nearestDist) { nearestDist = d; nearestObj = o; }
   });
-  // Also check star
   const starDist = camera.position.length();
   if (starDist < nearestDist) {
-    nearestDist = starDist;
     hudNearestEl.textContent = activeSection.star.title;
-    hudDistEl.textContent = nearestDist.toFixed(1)+' u';
+    hudDistEl.textContent    = starDist.toFixed(1) + ' u';
   } else if (nearestObj) {
     hudNearestEl.textContent = nearestObj.data.title;
-    hudDistEl.textContent = nearestDist.toFixed(1)+' u';
+    hudDistEl.textContent    = nearestDist.toFixed(1) + ' u';
   }
 
-  // Proximity popup when looking toward a planet
   checkProximityPopup();
 }
 
 function checkProximityPopup() {
   if (explorerAP) { proxPopup.classList.add('hidden'); return; }
 
-  let bestAngle = .92, bestObj = null;
-  const camFwd = expFwd;
+  let bestAngle = .93, bestObj = null;
 
   systemPlanetObjects.forEach(o => {
     const toObj = o.worldPos.clone().sub(camera.position).normalize();
-    const dot = camFwd.dot(toObj);
-    const dist = camera.position.distanceTo(o.worldPos);
-    if (dot > .92 && dist > 3 && dot > bestAngle) {
-      bestAngle = dot;
-      bestObj = o;
-    }
+    const dot   = expFwd.dot(toObj);
+    const dist  = camera.position.distanceTo(o.worldPos);
+    if (dot > .93 && dist > 3 && dot > bestAngle) { bestAngle = dot; bestObj = o; }
   });
 
-  // Also check star
   const toStar = new THREE.Vector3().sub(camera.position).normalize();
-  const starDot = camFwd.dot(toStar);
-  if (starDot > .93 && camera.position.length() > activeSection.starRadius+3) {
+  const starDot = expFwd.dot(toStar);
+  if (starDot > .93 && camera.position.length() > activeSection.starRadius + 3) {
     bestObj = { data: activeSection.star, worldPos: new THREE.Vector3(), isStar: true };
   }
 
@@ -982,10 +1214,7 @@ function checkProximityPopup() {
     proxName.textContent = bestObj.data.title;
     proxPopup.classList.remove('hidden');
     clearTimeout(proxTimeout);
-    proxTimeout = setTimeout(() => {
-      proxPopup.classList.add('hidden');
-      proxTarget = null;
-    }, 3000);
+    proxTimeout = setTimeout(() => { proxPopup.classList.add('hidden'); proxTarget = null; }, 3000);
   } else if (!bestObj && proxTarget) {
     proxPopup.classList.add('hidden');
     proxTarget = null;
@@ -1005,7 +1234,9 @@ function showExplorerInfo(target) {
 document.getElementById('info-close').addEventListener('click', () => {
   infoCardEl.classList.add('hidden');
   if (phase === 'guided' && tourQueue.length > 0) {
-    setTimeout(flyToNextTourStop, 800);
+    setTimeout(flyToNextTourStop, 600);
+  } else if (phase === 'guided' && tourQueue.length === 0) {
+    setTimeout(() => { tourHud.classList.add('hidden'); exitToSystem(); }, 600);
   }
 });
 
@@ -1019,12 +1250,14 @@ function exitToSystem() {
   reticleEl.classList.add('hidden');
   infoCardEl.classList.add('hidden');
   proxPopup.classList.add('hidden');
-  if (document['pointer'+'LockElement'] === canvas) { const ef = document['exit'+'P'+'o'+'i'+'n'+'t'+'e'+'r'+'L'+'o'+'c'+'k']; if (ef) ef.call(document); }
-
+  if (document['pointer'+'LockElement'] === canvas) {
+    const ef = document['exit'+'P'+'o'+'i'+'n'+'t'+'e'+'r'+'L'+'o'+'c'+'k'];
+    if (ef) ef.call(document);
+  }
   camera.position.set(0, 18, 32);
   camera.lookAt(0, 0, 0);
   document.getElementById('system-ui').classList.remove('hidden');
-  tourVel = 0; expVel = 0; scrollAccumTour = 0;
+  tourVel = 0; expVel = 0; expStrafeVel = 0; scrollAccumTour = 0;
   tourAP = null; explorerAP = null;
 }
 
@@ -1036,18 +1269,20 @@ function exitToHome() {
   reticleEl.classList.add('hidden');
   infoCardEl.classList.add('hidden');
   proxPopup.classList.add('hidden');
-  if (document['pointer'+'LockElement'] === canvas) { const ef = document['exit'+'P'+'o'+'i'+'n'+'t'+'e'+'r'+'L'+'o'+'c'+'k']; if (ef) ef.call(document); }
-
+  if (document['pointer'+'LockElement'] === canvas) {
+    const ef = document['exit'+'P'+'o'+'i'+'n'+'t'+'e'+'r'+'L'+'o'+'c'+'k'];
+    if (ef) ef.call(document);
+  }
   if (systemGroup) { scene.remove(systemGroup); systemGroup = null; }
   systemPlanetObjects = [];
 
   document.getElementById('home-ui').classList.remove('hidden');
-  // Restore orrery
   orrery.visible = true;
   orreryNodes.forEach(n => { n.labelEl.style.pointerEvents = 'auto'; });
   camera.position.set(0, 4, 22);
   camera.lookAt(0, 0, 0);
-  expVel = 0; tourVel = 0; bgStarMat.uniforms.uBeta.value = 0;
+  expVel = 0; expStrafeVel = 0; tourVel = 0;
+  bgStarMat.uniforms.uBeta.value = 0;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -1061,11 +1296,11 @@ function updateHome(dt) {
   camera.position.set(Math.sin(homeAngle)*r, h + Math.sin(homeAngle*.4)*2, Math.cos(homeAngle)*r);
   camera.lookAt(0, 0, 0);
 
-  // Orrery slow spin
   orrery.rotation.y += dt * .06;
 
-  // Update label positions
-  orreryNodes.forEach(({ group, labelEl, section }) => {
+  // Animate star node materials and update label positions
+  const t = performance.now() / 1000;
+  orreryNodes.forEach(({ group, starGroup, labelEl, section }) => {
     const worldPos = new THREE.Vector3();
     group.getWorldPosition(worldPos);
     worldPos.project(camera);
@@ -1076,15 +1311,23 @@ function updateHome(dt) {
     labelEl.style.top  = (sy-22)+'px';
     labelEl.style.opacity = worldPos.z < 1 ? '1' : '0';
 
-    // Hover glow
-    const isHovered = orreryHovered && orreryHovered.section===section;
-    group.children[0].material.uniforms.uStr.value = isHovered ? 3.5 : 1.8;
-    group.scale.setScalar(isHovered ? 1.18 : 1);
+    // Animate twinkle on star node shaders
+    const isHovered = orreryHovered && orreryHovered.section === section;
+    starGroup.children.forEach(c => {
+      if (c.material?.uniforms?.uTime) c.material.uniforms.uTime.value = t;
+      if (c.material?.uniforms?.uScale) c.material.uniforms.uScale.value = isHovered ? 2.2 : 1.0;
+    });
+    group.scale.setScalar(isHovered ? 1.2 : 1);
+  });
+
+  // Animate central star node too
+  orreryCentralStar.children.forEach(c => {
+    if (c.material?.uniforms?.uTime) c.material.uniforms.uTime.value = t;
   });
 }
 
 /* ─────────────────────────────────────────────────────────
-   SYSTEM ORBIT ANIMATION (all modes while in system)
+   SYSTEM ORBIT ANIMATION
    ───────────────────────────────────────────────────────── */
 function updateSystemOrbits(t) {
   if (!systemGroup) return;
@@ -1095,30 +1338,27 @@ function updateSystemOrbits(t) {
       0,
       data.orbitR * Math.sin(group.userData.orbitAngle)
     );
-    // world position (group is child of systemGroup, which is at origin)
     worldPos.copy(group.position);
 
-    // Moon orbits
     group.children.forEach(child => {
       if (!child.userData.orbitR) return;
       const a = t * child.userData.speed + child.userData.off;
       child.position.set(Math.cos(a)*child.userData.orbitR, Math.sin(a)*.15*child.userData.orbitR, Math.sin(a)*child.userData.orbitR);
     });
 
-    // Planet self-rotation
     group.children[0] && (group.children[0].rotation.y = t*.15);
   });
 }
 
 /* ─────────────────────────────────────────────────────────
-   SYSTEM MODE — revolving orbit camera when choosing
+   SYSTEM MODE — slow orbit camera while choosing
    ───────────────────────────────────────────────────────── */
 let systemOrbitAngle = 0;
 
 function updateSystemCamera(dt) {
   if (phase !== 'system') return;
-  systemOrbitAngle += dt*.08;
-  camera.position.set(Math.sin(systemOrbitAngle)*30, 16, Math.cos(systemOrbitAngle)*30);
+  systemOrbitAngle += dt*.06;
+  camera.position.set(Math.sin(systemOrbitAngle)*28, 14, Math.cos(systemOrbitAngle)*28);
   camera.lookAt(0, 0, 0);
 }
 
@@ -1129,13 +1369,11 @@ const clock = new THREE.Clock();
 
 function animate() {
   requestAnimationFrame(animate);
-  const dt  = Math.min(clock.getDelta(), .05);
-  const t   = clock.getElapsedTime();
+  const dt = Math.min(clock.getDelta(), .05);
+  const t  = clock.getElapsedTime();
 
-  // Background stars always spin gently
   bgStars.rotation.y = t * .001;
 
-  // Update glow uniforms
   orrery.traverse(obj => {
     if (obj.material?.uniforms?.uTime) obj.material.uniforms.uTime.value = t;
   });
@@ -1145,8 +1383,8 @@ function animate() {
     });
   }
 
-  if (phase === 'home')     { updateHome(dt); }
-  if (phase === 'warp')     { updateWarp(dt); }
+  if (phase === 'home')     updateHome(dt);
+  if (phase === 'warp')     updateWarp(dt);
   if (phase === 'system')   { updateSystemCamera(dt); updateSystemOrbits(t); }
   if (phase === 'guided')   { updateGuidedTour(dt); updateSystemOrbits(t); }
   if (phase === 'explorer') { updateExplorer(dt); updateSystemOrbits(t); }
@@ -1166,10 +1404,6 @@ window.addEventListener('resize', () => {
 /* ─────────────────────────────────────────────────────────
    INIT
    ───────────────────────────────────────────────────────── */
-// Hide orrery labels from DOM until home phase shown
 orreryNodes.forEach(n => { n.labelEl.style.opacity='0'; });
-
-// Console egg
 console.log('%c🌌 Hello from the console. tanishwas@gmail.com', 'font-size:13px;color:#00d4ff;background:#020209;padding:8px;');
-
 animate();
