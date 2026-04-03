@@ -261,6 +261,65 @@ function makeGlowSphere(radius, color, emissiveStr=1.0) {
   return new THREE.Mesh(geo, mat);
 }
 
+
+/* ─────────────────────────────────────────────────────────
+   PLANET SPHERE — Lambertian diffuse + Fresnel atmosphere
+   lit by the system's star PointLight
+   ───────────────────────────────────────────────────────── */
+function makePlanetSphere(radius, color) {
+  const geo = new THREE.SphereGeometry(radius, 64, 64);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor:    { value: new THREE.Color(color) },
+      uLightPos: { value: new THREE.Vector3(0, 0, 0) },  // updated each frame
+      uLightColor: { value: new THREE.Color(1, 1, 1) },
+    },
+    vertexShader: `
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPos;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform vec3 uLightPos;
+      uniform vec3 uLightColor;
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPos;
+      void main() {
+        vec3 N = normalize(vWorldNormal);
+        vec3 L = normalize(uLightPos - vWorldPos);
+        vec3 V = normalize(cameraPosition - vWorldPos);
+
+        // Lambertian diffuse
+        float NdotL = max(dot(N, L), 0.0);
+        vec3 diffuse = uColor * uLightColor * NdotL * 0.9;
+
+        // Subtle specular (Blinn-Phong, low intensity)
+        vec3 H = normalize(L + V);
+        float spec = pow(max(dot(N, H), 0.0), 28.0) * 0.25 * NdotL;
+        vec3 specular = uLightColor * spec;
+
+        // Fresnel rim — atmospheric glow on the terminator edge
+        float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.5);
+        vec3 rim = uColor * fresnel * 0.45;
+
+        // Dark side: very faint blue-grey city-light fill
+        vec3 nightFill = vec3(0.02, 0.02, 0.06) * (1.0 - NdotL);
+
+        vec3 final = diffuse + specular + rim + nightFill;
+        gl_FragColor = vec4(final, 1.0);
+      }`,
+    lights: false,  // we handle lighting manually via uniforms
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.isPlanetMesh = true;
+  return mesh;
+}
+
 function makeAtmo(radius, color) {
   const m = new THREE.ShaderMaterial({
     uniforms: { uColor:{value:new THREE.Color(color)} },
@@ -330,9 +389,8 @@ function makeStarPoint(color) {
         // Soft inner glow
         float glow = exp(-d * 12.0) * 0.4;
 
-        float twinkle = 0.88 + 0.12 * sin(uTime * 2.3);
         float brightness = clamp(core + glow + spikeH + spikeV + diag1 + diag2, 0.0, 1.0);
-        gl_FragColor = vec4(uColor + vec3(0.4, 0.4, 0.4) * core, brightness * twinkle);
+        gl_FragColor = vec4(uColor + vec3(0.4, 0.4, 0.4) * core, brightness);
       }`,
     transparent: true,
     depthWrite: false,
@@ -362,8 +420,7 @@ function makeStarPoint(color) {
         float d = length(gl_PointCoord - 0.5);
         if (d > 0.5) discard;
         float g = exp(-d * 8.0) * 0.25;
-        float twinkle = 0.7 + 0.3 * sin(uTime * 1.7 + 1.2);
-        gl_FragColor = vec4(uColor, g * twinkle);
+        gl_FragColor = vec4(uColor, g);
       }`,
     transparent: true,
     depthWrite: false,
@@ -750,6 +807,14 @@ function buildSystem(section) {
   star.userData.section = section;
   systemStarObj = star;
 
+  // Point light at the star — illuminates planets with directional lighting
+  const starLight = new THREE.PointLight(section.starColor, 3.5, 80, 1.2);
+  starLight.position.set(0, 0, 0);
+  systemGroup.add(starLight);
+  // Ambient fill so dark side isn't pure black
+  const ambientFill = new THREE.AmbientLight(0x111122, 0.4);
+  systemGroup.add(ambientFill);
+
   // Corona particles
   const coronaGeo = new THREE.BufferGeometry();
   const cPos = new Float32Array(120*3);
@@ -781,7 +846,7 @@ function buildSystem(section) {
       new THREE.LineBasicMaterial({color:p.color, transparent:true, opacity:.12})
     ));
 
-    const sphere = makeGlowSphere(.9, p.color, 1.6);
+    const sphere = makePlanetSphere(.9, p.color);
     group.add(sphere);
     group.add(makeAtmo(.9, p.color));
     if (p.ring) addRing(group, .9, p.color);
@@ -875,15 +940,15 @@ function startGuidedTour() {
   tourVel = 0; tourShipTime = 0; scrollAccumTour = 0; tourArrived = false;
   tourHud.classList.remove('hidden');
 
-  camera.position.set(0, 3, activeSection.starRadius + 12);
+  camera.position.set(0, 8, activeSection.starRadius + 28);
   camera.lookAt(0, 0, 0);
 
-  const starEntry = { isStar: true, data: activeSection.star, title: activeSection.star.title, pos: new THREE.Vector3(0,0,0) };
+  // Queue only planets (skip the star overview stop)
   const planetEntries = activeSection.planets.map((p, i) => {
     const angle = (i/activeSection.planets.length)*Math.PI*2;
     return { isStar: false, data: p, title: p.title, pos: new THREE.Vector3(p.orbitR*Math.cos(angle), 0, p.orbitR*Math.sin(angle)) };
   });
-  tourQueue = [starEntry, ...planetEntries];
+  tourQueue = [...planetEntries];
   flyToNextTourStop();
 }
 
@@ -899,13 +964,15 @@ function flyToNextTourStop() {
   scrollAccumTour = 0;
 
   const stop = tourQueue.shift();
-  const total = 1 + activeSection.planets.length;
+  const total = activeSection.planets.length;
   const idx   = total - tourQueue.length;
   tourStopEl.textContent = `${idx} / ${total}`;
-  tourHintEl.textContent  = `SCROLL to thrust  ·  heading to ${stop.title}`;
+  tourHintEl.textContent  = `Flying to ${stop.title}…`;
 
-  const arrivalDist = (stop.isStar ? activeSection.starRadius : .9) + 6;
-  const offset = new THREE.Vector3(0, 1.2, arrivalDist);
+  const arrivalDist = (stop.isStar ? activeSection.starRadius : .9) + 5;
+  // Approach from current camera direction toward the planet
+  const toCam = camera.position.clone().sub(stop.pos).normalize();
+  const offset = toCam.multiplyScalar(arrivalDist).add(new THREE.Vector3(0, 1.0, 0));
   tourAP = {
     target: stop.pos.clone().add(offset),
     data:   stop,
@@ -941,18 +1008,18 @@ function updateGuidedTour(dt) {
     fwd.lerp(dir.clone().normalize(), 0.04).normalize();
     camera.lookAt(camera.position.clone().add(fwd.multiplyScalar(10)));
 
-    if (dist < 1.2) {
+    if (dist < 1.5) {
       tourAP.onArrive();
       tourAP = null;
-      tourVel *= 0.05;
+      tourVel = 0;
     } else {
-      // Scroll drives thrust toward target
-      const thrustInput = scrollAccumTour;
-      scrollAccumTour  *= 0.75;
-
-      const autoSpeed = Math.min(C_TOUR * 0.5, dist * 0.35);
-      tourVel += (autoSpeed - tourVel) * 0.04;
-      if (Math.abs(thrustInput) > 0.5) tourVel += thrustInput * dt * 6;
+      // Auto-pilot: accelerate toward target, brake when close
+      const brakeDist = 4.0;
+      const cruiseSpeed = C_TOUR * 0.7;
+      const targetSpeed = dist < brakeDist
+        ? cruiseSpeed * (dist / brakeDist)
+        : cruiseSpeed;
+      tourVel += (targetSpeed - tourVel) * 0.08;
     }
   } else {
     // Coasting / arrived — decay
@@ -964,9 +1031,11 @@ function updateGuidedTour(dt) {
   tourVel *= 0.985;
   if (Math.abs(tourVel) < .01) tourVel = 0;
 
-  const fwd2 = new THREE.Vector3();
-  camera.getWorldDirection(fwd2);
-  camera.position.addScaledVector(fwd2, tourVel * dt);
+  if (tourAP) {
+    // Move directly toward target position
+    const toTarget = tourAP.target.clone().sub(camera.position).normalize();
+    camera.position.addScaledVector(toTarget, tourVel * dt);
+  }
 
   const beta = Math.abs(tourVel) / C_TOUR;
   const gamma = 1 / Math.sqrt(1 - beta * beta);
@@ -1039,9 +1108,14 @@ document.addEventListener('pointer'+'lockchange', () => {
 });
 
 document.addEventListener('mousemove', e => {
-  if (phase !== 'explorer' || !mouseLocked) return;
-  yaw   -= e.movementX * 0.0022;
-  pitch  = Math.max(-Math.PI*.4, Math.min(Math.PI*.4, pitch - e.movementY * .0022));
+  if (phase !== 'explorer') return;
+  // Use movementX/Y directly — works with or without pointer lock
+  // For trackpads: accumulate from raw mouse delta always
+  const dx = e.movementX || 0;
+  const dy = e.movementY || 0;
+  if (dx === 0 && dy === 0) return;
+  yaw   -= dx * 0.0022;
+  pitch  = Math.max(-Math.PI*.4, Math.min(Math.PI*.4, pitch - dy * 0.0022));
   updateExpOrientation();
   explorerAP = null;
   proxPopup.classList.add('hidden');
@@ -1339,6 +1413,15 @@ function updateSystemOrbits(t) {
       data.orbitR * Math.sin(group.userData.orbitAngle)
     );
     worldPos.copy(group.position);
+
+    // Update planet shader light uniform (light is at star = world origin of systemGroup)
+    group.children.forEach(child => {
+      if (child.userData.isPlanetMesh && child.material?.uniforms?.uLightPos) {
+        // Convert star position (systemGroup origin = 0,0,0) to planet's local space
+        const starWorldPos = new THREE.Vector3(0, 0, 0);
+        child.material.uniforms.uLightPos.value.copy(starWorldPos);
+      }
+    });
 
     group.children.forEach(child => {
       if (!child.userData.orbitR) return;
